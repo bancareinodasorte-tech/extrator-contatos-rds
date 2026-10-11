@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Extrator RDS</title>
+<style>
+:root{color-scheme:dark;--bg:#071426;--panel:#10223a;--line:#29415e;--blue:#2386f4;--gold:#e7bd65;--text:#f4f7fb;--muted:#aabbd0}
+*{box-sizing:border-box}body{margin:0;width:390px;min-height:460px;background:var(--bg);color:var(--text);font:14px system-ui,Arial}
+header{padding:19px 20px;background:linear-gradient(135deg,#112d50,#071426);border-bottom:1px solid var(--line)}
+.brand{color:var(--gold);font-weight:800;letter-spacing:1.4px;font-size:12px}h1{margin:6px 0 2px;font-size:21px}header p{margin:0;color:var(--muted);font-size:12px}
+main{padding:16px;display:grid;gap:12px}.card{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:13px}
+h2{font-size:13px;margin:0 0 9px;color:var(--gold)}p{line-height:1.45}.hint{color:var(--muted);font-size:12px;margin:5px 0}
+button{border:0;border-radius:8px;padding:11px 12px;font-weight:700;cursor:pointer;color:white;background:var(--blue);width:100%;margin-top:7px}
+button.secondary{background:#1b3049;border:1px solid var(--line)}button:disabled{opacity:.5;cursor:not-allowed}
+input,select{width:100%;background:#08182b;border:1px solid var(--line);color:white;padding:9px;border-radius:7px;margin-top:5px}
+#draws{max-height:160px;overflow:auto;display:grid;gap:6px}.draw{display:flex;gap:8px;align-items:flex-start;padding:7px;background:#0a192c;border-radius:7px}.draw input{width:auto;margin:2px 0 0}.draw small{display:block;color:var(--muted)}
+#log{white-space:pre-wrap;overflow-wrap:anywhere;background:#071426;padding:9px;border-radius:7px;min-height:48px;font-size:12px;color:#c9d8e9}.status{font-weight:700}
+footer{padding:0 16px 16px;color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+<header><div class="brand">REINO DA SORTE</div><h1>Extrator de Contatos RDS</h1><p>Selecione sorteios e exporte contatos em VCF.</p></header>
+<main>
+<section class="card"><h2>1 · Conexão</h2><p class="hint">Abra o painel oficial e entre normalmente. Depois volte a esta extensão.</p><button id="connect">Verificar painel conectado</button><div id="connection" class="hint">Aguardando verificação.</div></section>
+<section class="card"><h2>2 · Sorteios</h2><button id="load" class="secondary">Carregar sorteios disponíveis</button><div id="draws" class="hint">Nenhum sorteio carregado.</div><label class="hint" for="seller">Filtrar vendedor (opcional; texto do nome)</label><input id="seller" placeholder="Deixe vazio para todos os vendedores"><button id="extract" disabled>Extrair contatos selecionados</button></section>
+<section class="card"><h2>3 · Resultado</h2><div id="summary" class="hint">Nenhuma extração realizada.</div><button id="export" disabled>Baixar contatos (.VCF)</button><button id="csv" class="secondary" disabled>Baixar relatório (.CSV)</button></section>
+<section class="card"><h2>Registro</h2><div id="log">Pronto para verificar a conexão.</div></section>
+</main>
+<footer>Somente leitura. Não altera sorteios, bilhetes nem vendas. Não compartilhe token ou dados de compradores.</footer>
+<script src="popup.js"></script>
+</body>
+</html>
