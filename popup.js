@@ -5,6 +5,7 @@ let accessToken = null;
 let allDraws = [];
 let resultContacts = [];
 let activeTabId = null;
+let deviceId = null;
 
 function log(message) {
   $("log").textContent = String(message);
@@ -13,7 +14,7 @@ function setStatus(message) {
   $("connection").textContent = message;
 }
 function authHeaders() {
-  return { "Authorization": "Bearer " + accessToken, "Accept": "application/json" };
+  return { "Authorization": "Bearer " + accessToken, "Accept": "application/json", "x-device-id": deviceId || ("web_" + Date.now()) };
 }
 async function apiGet(path) {
   const response = await fetch(API + path, { method: "GET", headers: authHeaders() });
@@ -54,6 +55,7 @@ async function getTokenFromOfficialTab() {
   }
   if (!reply?.token) throw new Error("Não encontrei accessToken na sessão desta página. Entre novamente no painel oficial e tente outra vez.");
   accessToken = reply.token;
+  deviceId = reply.deviceId || null;
   return tab;
 }
 function normalizePhone(value) {
@@ -89,7 +91,6 @@ function cleanName(name) {
 }
 function deduplicateByPhone(rows) {
   const byPhone = new Map();
-  const duplicateNames = new Map();
   for (const row of rows) {
     const phone = normalizePhone(row.phone);
     if (!phone) continue;
