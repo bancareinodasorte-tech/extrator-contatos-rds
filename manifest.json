@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Extrator de Contatos RDS",
+  "version": "0.1.0",
+  "description": "Extrai contatos de sorteios no painel oficial autorizado e exporta VCF.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://admin.reinodasorte.com.br/*",
+    "https://api.reinodasorte.com.br/*"
+  ],
+  "action": {
+    "default_title": "Extrator de Contatos RDS",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://admin.reinodasorte.com.br/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
