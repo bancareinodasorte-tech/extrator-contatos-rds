@@ -1,0 +1,32 @@
+name: Empacotar extensão
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "manifest.json"
+      - "popup.html"
+      - "popup.js"
+      - "content.js"
+      - ".github/workflows/package-extension.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Validar JSON do manifesto
+        run: python -m json.tool manifest.json >/dev/null
+      - name: Empacotar extensão
+        run: zip -j extrator-contatos-rds.zip manifest.json popup.html popup.js content.js
+      - name: Publicar pacote para download
+        uses: actions/upload-artifact@v4
+        with:
+          name: extrator-contatos-rds
+          path: extrator-contatos-rds.zip
+          retention-days: 30
