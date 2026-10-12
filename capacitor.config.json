@@ -2,14 +2,6 @@
   "appId": "br.com.reinodasorte.extratorcontatos",
   "appName": "Extrator Contatos RDS",
   "webDir": "www",
-  "server": {
-    "url": "https://extrator-contatos-rds.onrender.com",
-    "cleartext": false,
-    "allowNavigation": [
-      "extrator-contatos-rds.onrender.com",
-      "extrator-contatos-rds-api.onrender.com"
-    ]
-  },
   "android": {
     "allowMixedContent": false
   }
