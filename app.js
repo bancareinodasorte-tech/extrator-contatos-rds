@@ -17,8 +17,14 @@
   async function api(url, options={}) {
     const headers={'Content-Type':'application/json',...(options.headers||{})};
     if(session)headers['X-Extrator-Session']=session;
-    const response=await fetch(API_BASE+url,{...options,headers});
-    let data;try{data=await response.json();}catch{throw new Error('Resposta inválida do servidor.');}
+    const retryable=(options.method||'GET')==='GET'||!!headers['X-Extrator-Request-Id'];
+    let response,lastError;
+    for(let attempt=0;attempt<(retryable?3:1);attempt++){
+      try{response=await fetch(API_BASE+url,{...options,headers});break;}
+      catch(e){lastError=e;if(attempt<(retryable?2:0))await new Promise(resolve=>setTimeout(resolve,900*(attempt+1)));}
+    }
+    if(!response)throw new Error('Não foi possível alcançar o servidor do Extrator após tentativas de reconexão. Verifique a conexão e tente novamente. Detalhe: '+(lastError?.message||'falha de rede'));
+    let data;try{data=await response.json();}catch{throw new Error('O servidor respondeu sem JSON válido (HTTP '+response.status+'). Tente novamente em instantes.');}
     if(!response.ok||data.success===false)throw new Error(data.message||('Falha HTTP '+response.status));
     return data;
   }
@@ -29,7 +35,7 @@
   }
   async function loadDraws() {
     setStatus('Buscando os sorteios disponíveis na conta oficial…');
-    const result=await api('/api/draws');const draws=(result.draws||[]).filter(d=>String(d.draw_status||d.status||'').toLowerCase()==='finalized');const select=$('draws');select.replaceChildren();
+    const result=await api('/api/draws');const draws=(result.draws||[]).filter(d=>String(d.draw_status||d.status||'').toLowerCase()==='finalized');const select=$('draws');$('drawsLabel').textContent='Sorteios finalizados disponíveis ('+draws.length+')';select.replaceChildren();
     for(const d of draws){
       const id=d.id??d.draw_id??d.drawId;if(id===undefined||id===null)continue;
       const option=document.createElement('option');option.value=String(id);
@@ -40,7 +46,7 @@
     else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
     $('sellerCheckboxes').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
     setProgress('Selecione os sorteios desejados e, depois, toque em “Iniciar extração”. Nenhuma leitura será iniciada automaticamente.');
-    if(select.options.length){for(const option of select.options)option.selected=false;select.selectedIndex=-1;updateSelectionSummary();}setWorkflow('draws');
+    if(select.options.length){for(const option of select.options)option.selected=false;select.selectedIndex=-1;updateSelectionSummary();}$('drawsLabel').textContent='Sorteios finalizados disponíveis ('+select.options.length+')';setWorkflow('draws');
   }
   async function loadSellers(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const list=$('sellerCheckboxes');list.replaceChildren();sellers=[];sellerDrawSignature=signature;updateSelectionSummary();
@@ -72,7 +78,7 @@
     $('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';
     setProgress('Extração solicitada manualmente. Iniciando leitura dos sorteios e vendedores selecionados…');
     try{
-      const selectedSellerInputs=[...document.querySelectorAll('#sellerCheckboxes input.seller-option:checked')];const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,sellerIds:selectedSellerInputs.map(o=>o.dataset.sellerId),sellerNames:[]})});activeExtractionJob=started.jobId;localStorage.setItem('rds_extrator_active_job',activeExtractionJob);if(started.resumeToken)localStorage.setItem('rds_extrator_resume_token',started.resumeToken);
+      const selectedSellerInputs=[...document.querySelectorAll('#sellerCheckboxes input.seller-option:checked')];if(!selectedSellerInputs.length){setProgress('Marque ao menos um vendedor antes de iniciar a extração.');return;}const requestId=localStorage.getItem('rds_extrator_start_request')||('rds-'+Date.now()+'-'+Math.random().toString(36).slice(2));localStorage.setItem('rds_extrator_start_request',requestId);const started=await api('/api/extract',{method:'POST',headers:{'X-Extrator-Request-Id':requestId},body:JSON.stringify({drawIds,sellerIds:selectedSellerInputs.map(o=>o.dataset.sellerId),sellerNames:[]})});localStorage.removeItem('rds_extrator_start_request');activeExtractionJob=started.jobId;localStorage.setItem('rds_extrator_active_job',activeExtractionJob);if(started.resumeToken)localStorage.setItem('rds_extrator_resume_token',started.resumeToken);
       let result;
       do{
         await sleep(1800);
