@@ -9,6 +9,7 @@ on:
       - 'app.js'
       - 'capacitor.config.json'
       - 'package.json'
+      - 'native-export-entry.js'
       - '.github/workflows/android-apk.yml'
 
 jobs:
@@ -30,9 +31,16 @@ jobs:
           mkdir -p www
           cp index.html app.js logo-oficial-rds.svg www/
           sed -i 's|src="/logo-oficial-rds.svg"|src="./logo-oficial-rds.svg"|' www/index.html
+          sed -i 's|src="/app.js?v=23"|src="./app.js?v=24"|' www/index.html
+          sed -i 's|src="/app.js?v=22"|src="./app.js?v=24"|' www/index.html
 
       - name: Install Capacitor
-        run: npm install --no-save @capacitor/core @capacitor/cli @capacitor/android @capacitor/filesystem
+        run: npm install --no-save @capacitor/core @capacitor/cli @capacitor/android @capacitor/filesystem esbuild
+
+      - name: Bundle native file export plugin
+        run: |
+          npx esbuild native-export-entry.js --bundle --format=iife --outfile=www/native-export.js
+          sed -i 's|<script src="./app.js?v=24"></script>|<script src="./native-export.js"></script>\n<script src="./app.js?v=24"></script>|' www/index.html
 
       - name: Add Android platform
         run: npx cap add android
