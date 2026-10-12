@@ -37,7 +37,7 @@
     else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
     $('sellerCheckboxes').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
     setProgress('Selecione um ou mais sorteios. Os vendedores participantes serão carregados automaticamente.');
-    if(select.options.length){select.selectedIndex=-1;updateSelectionSummary();}
+    if(select.options.length){for(const option of select.options)option.selected=false;select.selectedIndex=-1;updateSelectionSummary();}
   }
   async function loadSellers(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const list=$('sellerCheckboxes');list.replaceChildren();sellers=[];sellerDrawSignature=signature;updateSelectionSummary();
