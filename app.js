@@ -42,16 +42,27 @@
     finally{$('loginBtn').disabled=false;}
   }
   async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   async function extract(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');
     contacts=[];canExport=false;$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('extractBtn').disabled=true;$('reloadBtn').disabled=true;
-    $('ticketsCount').textContent='…';$('contactsCount').textContent='…';$('errorsCount').textContent='…';setProgress('Extração em andamento. O servidor está percorrendo lotes e páginas; não feche esta página.');
-    try{const r=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,seller:$('seller').value.trim()})});
-      $('ticketsCount').textContent=Number(r.ticketsRead||0).toLocaleString('pt-BR');$('errorsCount').textContent=(r.errors||[]).length.toLocaleString('pt-BR');
-      if(!r.success||(r.errors||[]).length){setProgress((r.message||'A extração teve falhas.')+'\n'+(r.errors||[]).slice(0,8).join('\n'));return;}
-      contacts=r.contacts||[];canExport=true;$('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');$('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;
-      setProgress('Concluído sem falhas: '+Number(r.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes lidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido.');
-    }catch(e){$('ticketsCount').textContent='—';$('contactsCount').textContent='—';$('errorsCount').textContent='1';setProgress('Falha: '+e.message+'\nExportação bloqueada para evitar arquivo incompleto.');}
+    $('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';
+    setProgress('Iniciando extração segura em segundo plano…');
+    try{
+      const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,seller:$('seller').value.trim()})});
+      let result;
+      do{
+        await sleep(1800);
+        result=await api('/api/extract/status?id='+encodeURIComponent(started.jobId));
+        $('ticketsCount').textContent=Number(result.ticketsRead||0).toLocaleString('pt-BR');
+        $('errorsCount').textContent=(result.errors||[]).length.toLocaleString('pt-BR');
+        setProgress((result.message||'Extração em andamento.')+'\n'+(result.current||'')+'\nPáginas processadas: '+Number(result.pagesDone||0).toLocaleString('pt-BR')+' · Bilhetes lidos: '+Number(result.ticketsRead||0).toLocaleString('pt-BR'));
+      }while(result.status==='running');
+      if(result.status!=='complete'||(result.errors||[]).length){setProgress((result.message||'A extração teve falhas.')+'\n'+(result.errors||[]).slice(0,8).join('\n'));return;}
+      contacts=result.contacts||[];canExport=true;$('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
+      $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;
+      setProgress('Concluído sem falhas: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes lidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido.');
+    }catch(e){$('errorsCount').textContent='1';setProgress('Falha: '+e.message+'\nExportação bloqueada para evitar arquivo incompleto.');}
     finally{$('extractBtn').disabled=false;$('reloadBtn').disabled=false;}
   }
   function download(name,type,content){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
