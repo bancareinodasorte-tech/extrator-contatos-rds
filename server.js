@@ -11,7 +11,7 @@ const sessionTtl = 12 * 60 * 60 * 1000;
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 
 function json(res, status, data) {
-  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'same-origin'});
+  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Vary':'Origin'});
   res.end(JSON.stringify(data));
 }
 function body(req) {
@@ -61,7 +61,7 @@ function extractData(result) { return result && result.data!==undefined ? result
 function sendError(res,e){json(res,e.status||500,{success:false,message:e.message||'Erro inesperado na integração oficial.'});}
 
 const app=http.createServer(async(req,res)=>{
-  if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,X-Extrator-Session','Access-Control-Max-Age':'86400'});return res.end();}
+  if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,X-Extrator-Session','Access-Control-Max-Age':'86400','Vary':'Origin'});return res.end();}
   const u=new URL(req.url,'http://localhost');
   if(req.method==='GET'&&u.pathname==='/api/health')return json(res,200,{success:true,service:'extrator-contatos-rds'});
   if(req.method==='POST'&&u.pathname==='/api/login'){
