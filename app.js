@@ -1,4 +1,5 @@
 (() => {
+  const API_BASE = 'https://extrator-contatos-rds-api.onrender.com';
   const $ = id => document.getElementById(id);
   let session = sessionStorage.getItem('rds_extrator_session') || '';
   let contacts = [];
@@ -9,7 +10,7 @@
   async function api(url, options={}) {
     const headers={'Content-Type':'application/json',...(options.headers||{})};
     if(session)headers['X-Extrator-Session']=session;
-    const response=await fetch(url,{...options,headers});
+    const response=await fetch(API_BASE+url,{...options,headers});
     let data;try{data=await response.json();}catch{throw new Error('Resposta inválida do servidor.');}
     if(!response.ok||data.success===false)throw new Error(data.message||('Falha HTTP '+response.status));
     return data;
