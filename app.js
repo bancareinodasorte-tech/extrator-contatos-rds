@@ -6,6 +6,8 @@
   let canExport = false;
   let sellers = [];
   let sellerDrawSignature = '';
+  const normalizeSellerName = name => String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
+  function updateSelectionSummary(){const draws=[...$('draws').selectedOptions].length;const options=[...document.querySelectorAll('#sellerCheckboxes input.seller-option')];const selected=options.filter(o=>o.checked).length;$('selectionSummary').textContent=draws+' sorteio(s) selecionado(s) · '+options.length+' vendedores ativos · '+selected+' selecionado(s) · Total '+selected+'/'+options.length;}
   const setStatus = (message, bad=false) => { $('status').textContent=message; $('status').style.color=bad?'#ff9b9b':''; };
   const setProgress = message => $('progress').textContent=message;
   const appState = text => $('appState').textContent=text;
@@ -38,14 +40,14 @@
     if(select.options.length){select.options[0].selected=true;await loadSellers();}
   }
   async function loadSellers(){
-    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const list=$('sellerCheckboxes');list.replaceChildren();sellers=[];sellerDrawSignature=signature;
+    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const list=$('sellerCheckboxes');list.replaceChildren();sellers=[];sellerDrawSignature=signature;updateSelectionSummary();
     if(!drawIds.length){list.innerHTML='<p class="muted">Selecione ao menos um sorteio finalizado.</p>';$('sellerInfo').textContent='Selecione ao menos um sorteio finalizado.';return;}
     $('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Consultando todos os lotes e páginas para encontrar os vendedores…';
     try{const started=await api('/api/sellers?drawIds='+encodeURIComponent(signature));let status=started;const startedAt=Date.now();
       while(status.status==='running'){$('sellerInfo').textContent=(status.current||status.message||'Buscando vendedores…')+' · '+(status.pagesDone||0)+' páginas consultadas';if(Date.now()-startedAt>12*60*1000)throw new Error('A consulta demorou mais que o esperado. Use “Atualizar vendedores” para tentar novamente.');await new Promise(resolve=>setTimeout(resolve,1500));status=await api('/api/sellers/status?id='+encodeURIComponent(started.jobId));}
       if(status.status!=='complete')throw new Error(status.message||'Não foi possível concluir a consulta.');sellers=status.sellers||[];
       if(!sellers.length){list.innerHTML='<p class="muted">Nenhum vendedor encontrado.</p>';$('sellerInfo').textContent=status.message||'A API não retornou vendedores para este sorteio.';return;}
-      for(const s of sellers){const label=document.createElement('label');label.className='seller-check';const input=document.createElement('input');input.type='checkbox';input.value=s.id;input.className='seller-option';const name=document.createElement('span');name.textContent=s.name;label.append(input,name);list.appendChild(label);}
+      for(const s of sellers){const label=document.createElement('label');label.className='seller-check';const input=document.createElement('input');input.type='checkbox';input.value=normalizeSellerName(s.name);input.dataset.sellerName=s.name;input.className='seller-option';const name=document.createElement('span');name.textContent=s.name;label.append(input,name);list.appendChild(label);}updateSelectionSummary();
       $('sellerInfo').textContent=sellers.length+' vendedor(es) encontrado(s). Marque as caixas dos vendedores desejados. Se nenhuma caixa for marcada, serão incluídos todos.'+(status.errors?.length?' Atenção: houve falhas parciais; atualize antes de extrair.':'');
     }catch(e){$('sellerInfo').textContent='Não foi possível carregar a lista completa: '+e.message;}
     finally{$('reloadSellers').disabled=false;$('selectAllSellers').disabled=false;$('clearSellers').disabled=false;}
@@ -63,11 +65,11 @@
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   async function extract(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');
-    contacts=[];canExport=false;$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('extractBtn').disabled=true;$('reloadBtn').disabled=true;
+    contacts=[];canExport=false;$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('previewBtn').disabled=true;$('previewBtn').hidden=true;$('previewPanel').classList.add('hidden');$('extractBtn').disabled=true;$('reloadBtn').disabled=true;
     $('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';
     setProgress('Iniciando extração segura em segundo plano…');
     try{
-      const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,sellerIds:[...document.querySelectorAll('#sellerCheckboxes input.seller-option:checked')].map(o=>o.value)})});
+      const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,sellerNames:[...document.querySelectorAll('#sellerCheckboxes input.seller-option:checked')].map(o=>o.dataset.sellerName)})});
       let result;
       do{
         await sleep(1800);
@@ -78,7 +80,7 @@
       }while(result.status==='running');
       if(result.status!=='complete'||(result.errors||[]).length){setProgress((result.message||'A extração teve falhas.')+'\n'+(result.errors||[]).slice(0,8).join('\n'));return;}
       contacts=result.contacts||[];canExport=true;$('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
-      $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;
+      $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;$('previewBtn').disabled=!contacts.length;$('previewBtn').hidden=!contacts.length;
       setProgress('Concluído sem falhas: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos analisados e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido.');
     }catch(e){$('errorsCount').textContent='1';setProgress('Falha: '+e.message+'\nExportação bloqueada para evitar arquivo incompleto.');}
     finally{$('extractBtn').disabled=false;$('reloadBtn').disabled=false;}
@@ -91,8 +93,11 @@
   $('reloadBtn').addEventListener('click',()=>loadDraws().catch(e=>setStatus(e.message,true)));$('extractBtn').addEventListener('click',extract);
   $('selectAllDraws').addEventListener('click',()=>{[...$('draws').options].forEach(o=>o.selected=true);loadSellers();});$('clearDraws').addEventListener('click',()=>{[...$('draws').options].forEach(o=>o.selected=false);loadSellers();});
   $('draws').addEventListener('change',()=>loadSellers());$('reloadSellers').addEventListener('click',()=>loadSellers());
-  $('selectAllSellers').addEventListener('click',()=>{document.querySelectorAll('#sellerCheckboxes input.seller-option').forEach(o=>o.checked=true);});$('clearSellers').addEventListener('click',()=>{document.querySelectorAll('#sellerCheckboxes input.seller-option').forEach(o=>o.checked=false);});
-  $('vcfBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const data=contacts.map(c=>'BEGIN:VCARD\r\nVERSION:3.0\r\nN:'+vcfEscape(c.name)+';;;;\r\nFN:'+vcfEscape(c.name)+'\r\nTEL;TYPE=CELL:'+c.phone+'\r\nEND:VCARD').join('\r\n')+'\r\n';download('contatos-reino-da-sorte.vcf','text/vcard;charset=utf-8',data);});
+  $('sellerCheckboxes').addEventListener('change',updateSelectionSummary);
+  $('selectAllSellers').addEventListener('click',()=>{document.querySelectorAll('#sellerCheckboxes input.seller-option').forEach(o=>o.checked=true);updateSelectionSummary();});$('clearSellers').addEventListener('click',()=>{document.querySelectorAll('#sellerCheckboxes input.seller-option').forEach(o=>o.checked=false);updateSelectionSummary();});
+  $('previewBtn').addEventListener('click',()=>renderPreview());$('closePreview').addEventListener('click',()=> $('previewPanel').classList.add('hidden'));$('previewSearch').addEventListener('input',()=>renderPreview());
+  function renderPreview(){if(!canExport)return;const query=$('previewSearch').value.trim().toLocaleUpperCase('pt-BR');const filtered=contacts.filter(c=>!query||(c.name+' '+c.phone).toLocaleUpperCase('pt-BR').includes(query));$('previewTotal').textContent=filtered.length.toLocaleString('pt-BR')+' contato(s) exibido(s) de '+contacts.length.toLocaleString('pt-BR');const tbody=$('previewRows');tbody.replaceChildren();for(const c of filtered){const tr=document.createElement('tr');const tdName=document.createElement('td');tdName.textContent=c.name;const tdPhone=document.createElement('td');tdPhone.textContent=c.phone;tr.append(tdName,tdPhone);tbody.appendChild(tr);}$('previewPanel').classList.remove('hidden');}
+  $('vcfBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const data=contacts.map(c=>'BEGIN:VCARD\r\nVERSION:3.0\r\nN:'+vcfEscape(c.name)+';;;;\r\nFN:'+vcfEscape(c.name)+'\r\nTEL;TYPE=CELL:+55'+c.phone+'\r\nEND:VCARD').join('\r\n')+'\r\n';download('contatos-reino-da-sorte.vcf','text/vcard;charset=utf-8',data);});
   $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
   if(localStorage.getItem('rds_extrator_email')){$('email').value=localStorage.getItem('rds_extrator_email');$('rememberPassword').checked=true;}
   if(localStorage.getItem('rds_extrator_password'))$('password').value=localStorage.getItem('rds_extrator_password');
