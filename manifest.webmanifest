@@ -1,0 +1,12 @@
+{
+  "name": "Extrator de Contatos RDS",
+  "short_name": "Extrator RDS",
+  "description": "Extrator de contatos da Reino da Sorte",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#071426",
+  "theme_color": "#071426",
+  "icons": []
+}
