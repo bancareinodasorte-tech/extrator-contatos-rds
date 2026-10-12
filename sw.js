@@ -1,4 +1,4 @@
-const CACHE_NAME = "extrator-rds-shell-v3";
+const CACHE_NAME = "extrator-rds-shell-v4";
 const SHELL = ["/", "/manifest.webmanifest", "/icon.svg"];
 self.addEventListener("message", event => { if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting(); });
 self.addEventListener("install", event => {
