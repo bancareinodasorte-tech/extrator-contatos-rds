@@ -144,24 +144,18 @@
     const isNative=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
     if(isNative){
       try{
-        const plugins=window.Capacitor.Plugins||{};
-        const fs=plugins.Filesystem;
-        if(!fs||!fs.writeFile)throw new Error('Recurso de gravação não disponível no aplicativo.');
+        if(!window.RDSNativeExport||!window.RDSNativeExport.saveFile)throw new Error('O módulo nativo de exportação não foi carregado. Feche e abra o aplicativo novamente.');
         const base64=await new Promise((resolve,reject)=>{
           const reader=new FileReader();
           reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');
           reader.onerror=()=>reject(new Error('Não foi possível preparar o arquivo.'));
           reader.readAsDataURL(new Blob([content],{type}));
         });
-        const result=await fs.writeFile({path:name,data:base64,directory:'DOCUMENTS',recursive:true});
-        setProgress('Arquivo salvo no Android: '+(result.uri||name)+'. Abra Downloads/Documentos ou use o gerenciador de arquivos do aparelho.');
+        const result=await window.RDSNativeExport.saveFile(name,type,base64);
+        setProgress('Arquivo salvo no Android em Documentos: '+(result.uri||name));
         return;
       }catch(e){
-        setProgress('Não foi possível salvar diretamente no Android: '+e.message+'. Tente usar Compartilhar/Salvar arquivo.');
-        try{
-          const file=new File([content],name,{type});
-          if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return;}
-        }catch{}
+        setProgress('Falha ao salvar arquivo no Android: '+(e.message||String(e)));
         return;
       }
     }
