@@ -4,6 +4,8 @@
   let session = sessionStorage.getItem('rds_extrator_session') || '';
   let contacts = [];
   let canExport = false;
+  let sellers = [];
+  let sellerDrawSignature = '';
   const setStatus = (message, bad=false) => { $('status').textContent=message; $('status').style.color=bad?'#ff9b9b':''; };
   const setProgress = message => $('progress').textContent=message;
   const appState = text => $('appState').textContent=text;
@@ -31,7 +33,20 @@
     }
     if(!select.options.length){const o=document.createElement('option');o.textContent='Nenhum sorteio retornado pela API';select.appendChild(o);setStatus('A API autenticou, mas não retornou sorteios para esta conta.',true);}
     else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
-    setProgress('Selecione um ou mais sorteios. Opcionalmente, filtre pelo nome do vendedor.');
+    $('seller').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
+    setProgress('Selecione um ou mais sorteios. Os vendedores participantes serão carregados automaticamente.');
+  }
+  async function loadSellers(){
+    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');
+    const select=$('seller');select.replaceChildren();sellers=[];sellerDrawSignature=signature;
+    if(!drawIds.length){select.disabled=true;$('sellerInfo').textContent='Selecione ao menos um sorteio.';return;}
+    select.disabled=true;$('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Buscando vendedores participantes…';
+    try{const r=await api('/api/sellers?drawIds='+encodeURIComponent(signature));sellers=r.sellers||[];
+      if(!sellers.length){const o=document.createElement('option');o.textContent='Nenhum vendedor encontrado';select.appendChild(o);$('sellerInfo').textContent=r.note||'A API não retornou vendedores para os sorteios selecionados.';return;}
+      for(const s of sellers){const o=document.createElement('option');o.value=s.id;o.textContent=s.name;select.appendChild(o);}
+      $('sellerInfo').textContent=sellers.length+' vendedor(es) encontrado(s). Se não selecionar nenhum, a extração incluirá todos. Use “Selecionar todos” para escolher explicitamente todos os vendedores listados.';
+    }catch(e){$('sellerInfo').textContent='Não foi possível carregar vendedores: '+e.message;}
+    finally{select.disabled=false;$('reloadSellers').disabled=false;$('selectAllSellers').disabled=false;$('clearSellers').disabled=false;}
   }
   async function login() {
     const email=$('email').value.trim(),password=$('password').value;
@@ -41,7 +56,7 @@
     catch(e){session='';sessionStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);}
     finally{$('loginBtn').disabled=false;}
   }
-  async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
+  async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;sellers=[];$('seller').replaceChildren();$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   async function extract(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');
@@ -49,7 +64,7 @@
     $('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';
     setProgress('Iniciando extração segura em segundo plano…');
     try{
-      const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,seller:$('seller').value.trim()})});
+      const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,sellerIds:[...$('seller').selectedOptions].map(o=>o.value)})});
       let result;
       do{
         await sleep(1800);
@@ -69,6 +84,8 @@
   function vcfEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');}
   $('loginBtn').addEventListener('click',login);$('password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('email').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('logoutBtn').addEventListener('click',logout);
   $('reloadBtn').addEventListener('click',()=>loadDraws().catch(e=>setStatus(e.message,true)));$('extractBtn').addEventListener('click',extract);
+  $('draws').addEventListener('change',()=>loadSellers());$('reloadSellers').addEventListener('click',()=>loadSellers());
+  $('selectAllSellers').addEventListener('click',()=>{[...$('seller').options].forEach(o=>o.selected=true);});$('clearSellers').addEventListener('click',()=>{[...$('seller').options].forEach(o=>o.selected=false);});
   $('vcfBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const data=contacts.map(c=>'BEGIN:VCARD\r\nVERSION:3.0\r\nN:'+vcfEscape(c.name)+';;;;\r\nFN:'+vcfEscape(c.name)+'\r\nTEL;TYPE=CELL:'+c.phone+'\r\nEND:VCARD').join('\r\n')+'\r\n';download('contatos-reino-da-sorte.vcf','text/vcard;charset=utf-8',data);});
   $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
   if(session){loggedIn(true);loadDraws().catch(e=>{session='';sessionStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);});}else loggedIn(false);
