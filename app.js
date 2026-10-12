@@ -19,9 +19,10 @@
     if(session)headers['X-Extrator-Session']=session;
     const retryable=(options.method||'GET')==='GET'||!!headers['X-Extrator-Request-Id'];
     let response,lastError;
-    for(let attempt=0;attempt<(retryable?3:1);attempt++){
+    const maxAttempts=retryable?7:1;
+    for(let attempt=0;attempt<maxAttempts;attempt++){
       try{response=await fetch(API_BASE+url,{...options,headers});break;}
-      catch(e){lastError=e;if(attempt<(retryable?2:0))await new Promise(resolve=>setTimeout(resolve,900*(attempt+1)));}
+      catch(e){lastError=e;if(attempt<maxAttempts-1)await new Promise(resolve=>setTimeout(resolve,Math.min(1000*(attempt+1),5000)));}
     }
     if(!response)throw new Error('Não foi possível alcançar o servidor do Extrator após tentativas de reconexão. Verifique a conexão e tente novamente. Detalhe: '+(lastError?.message||'falha de rede'));
     let data;try{data=await response.json();}catch{throw new Error('O servidor respondeu sem JSON válido (HTTP '+response.status+'). Tente novamente em instantes.');}
@@ -95,7 +96,18 @@
       let result;
       do{
         await sleep(1800);
-        result=await api('/api/extract/status?id='+encodeURIComponent(started.jobId));
+        try {
+          result=await api('/api/extract/status?id='+encodeURIComponent(started.jobId),{headers:{'X-Extrator-Resume':localStorage.getItem('rds_extrator_resume_token')||''}});
+        } catch(pollError) {
+          let recovered=false;
+          for(let retry=1;retry<=8;retry++){
+            setProgress('Conexão temporariamente instável. Tentativa de retomada '+retry+'/8…\nA extração não será marcada como falha por uma interrupção momentânea.');
+            await sleep(Math.min(retry*1800,9000));
+            try { result=await api('/api/extract/status?id='+encodeURIComponent(started.jobId),{headers:{'X-Extrator-Resume':localStorage.getItem('rds_extrator_resume_token')||''}}); recovered=true; break; }
+            catch(retryError) { pollError=retryError; }
+          }
+          if(!recovered) throw new Error('Não foi possível restabelecer a consulta após 8 tentativas. Reabra o aplicativo e verifique se a extração ainda está ativa. Detalhe: '+pollError.message);
+        }
         $('ticketsCount').textContent=Number(result.ticketsRead||0).toLocaleString('pt-BR');
         $('errorsCount').textContent=(result.errors||[]).length.toLocaleString('pt-BR');
         setProgress((result.message||'Extração em andamento.')+'\n'+(result.current||'')+'\nPáginas processadas: '+Number(result.pagesDone||0).toLocaleString('pt-BR')+' · Bilhetes vendidos analisados: '+Number(result.ticketsRead||0).toLocaleString('pt-BR'));
