@@ -81,7 +81,7 @@ const app=http.createServer(async(req,res)=>{
     const id=(req.headers['x-extrator-session']||'').toString();sessions.delete(id);return json(res,200,{success:true});
   }
   if(req.method==='GET'&&!u.pathname.startsWith('/api/')) {
-    const filePath=path.join(__dirname,u.pathname==='/'?'index.html':decodeURIComponent(u.pathname).replace(/^\\/+/,'')); 
+    const filePath=path.join(__dirname,u.pathname==='/'?'index.html':decodeURIComponent(u.pathname).slice(1)); 
     if(!filePath.startsWith(__dirname))return json(res,403,{success:false,message:'Acesso negado.'});
     return fs.readFile(filePath,(err,content)=>{if(err){res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8'});return res.end('Não encontrado');}res.writeHead(200,{'Content-Type':mime[path.extname(filePath)]||'application/octet-stream','Cache-Control':'no-cache'});res.end(content);});
   }
