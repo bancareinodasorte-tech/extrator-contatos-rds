@@ -13,8 +13,26 @@ const extractionStartRequests = new Map();
 const sessionTtl = 12 * 60 * 60 * 1000;
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 
-function json(res, status, data) {
-  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Vary':'Origin'});
+const allowedOrigins = new Set([
+  'https://extrator-contatos-rds.onrender.com',
+  'capacitor://localhost',
+  'http://localhost',
+  'https://localhost',
+  'http://localhost:8080'
+]);
+function corsHeaders(req) {
+  const origin = String(req.headers.origin || '');
+  const allowOrigin = allowedOrigins.has(origin) ? origin : 'https://extrator-contatos-rds.onrender.com';
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,X-Extrator-Session,X-Extrator-Resume,X-Extrator-Request-Id',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin'
+  };
+}
+function json(res, status, data, req=null) {
+  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...(req?corsHeaders(req):{'Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Vary':'Origin'})});
   res.end(JSON.stringify(data));
 }
 function body(req) {
@@ -136,32 +154,32 @@ async function runExtraction(s, b, job) {
   job.status='complete';job.message='Leitura concluída sem falhas.';job.contacts=contacts;job.contactsCount=contacts.length;job.errors=[];job.ticketsRead=ticketsRead;
 }
 const app=http.createServer(async(req,res)=>{
-  if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,X-Extrator-Session,X-Extrator-Resume,X-Extrator-Request-Id','Access-Control-Max-Age':'86400','Vary':'Origin'});return res.end();}
+  if(req.method==='OPTIONS'){res.writeHead(204,corsHeaders(req));return res.end();}
   const u=new URL(req.url,'http://localhost');
-  if(req.method==='GET'&&u.pathname==='/api/health')return json(res,200,{success:true,service:'extrator-contatos-rds'});
+  if(req.method==='GET'&&u.pathname==='/api/health')return json(res,200,{success:true,service:'extrator-contatos-rds'},req);
   if(req.method==='POST'&&u.pathname==='/api/login'){
     try{
       const b=await body(req);
-      if(!b.email||!b.password)return json(res,400,{success:false,message:'Informe e-mail e senha da conta oficial.'});
+      if(!b.email||!b.password)return json(res,400,{success:false,message:'Informe e-mail e senha da conta oficial.'},req);
       const deviceId='rds_extrator_'+crypto.randomBytes(16).toString('hex');
       const result=await requestOfficial('/auth/login','POST',{email:String(b.email).trim(),password:String(b.password),deviceId},null,deviceId);
       const d=extractData(result);
-      if(!d||!d.accessToken)return json(res,502,{success:false,message:'Login respondeu sem token. Verifique a resposta da API oficial.'});
+      if(!d||!d.accessToken)return json(res,502,{success:false,message:'Login respondeu sem token. Verifique a resposta da API oficial.'},req);
       const id=crypto.randomBytes(32).toString('hex');
       sessions.set(id,{accessToken:d.accessToken,refreshToken:d.refreshToken||null,deviceId,createdAt:Date.now(),lastSeenAt:Date.now()});
-      return json(res,200,{success:true,session:id,user:d.user||d.admin||null});
+      return json(res,200,{success:true,session:id,user:d.user||d.admin||null},req);
     }catch(e){return sendError(res,e);}
   }
   if(req.method==='POST'&&u.pathname==='/api/logout'){
-    const id=(req.headers['x-extrator-session']||'').toString();sessions.delete(id);return json(res,200,{success:true});
+    const id=(req.headers['x-extrator-session']||'').toString();sessions.delete(id);return json(res,200,{success:true},req);
   }
   if(req.method==='GET'&&!u.pathname.startsWith('/api/')) {
     const filePath=path.join(__dirname,u.pathname==='/'?'index.html':decodeURIComponent(u.pathname).slice(1)); 
-    if(!filePath.startsWith(__dirname))return json(res,403,{success:false,message:'Acesso negado.'});
+    if(!filePath.startsWith(__dirname))return json(res,403,{success:false,message:'Acesso negado.'},req);
     return fs.readFile(filePath,(err,content)=>{if(err){res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8'});return res.end('Não encontrado');}res.writeHead(200,{'Content-Type':mime[path.extname(filePath)]||'application/octet-stream','Cache-Control':'no-cache'});res.end(content);});
   }
   const s=getSession(req);
-  if(!s)return json(res,401,{success:false,message:'Sessão expirada. Entre novamente com sua conta oficial.'});
+  if(!s)return json(res,401,{success:false,message:'Sessão expirada. Entre novamente com sua conta oficial.'},req);
   if(req.method==='GET'&&u.pathname==='/api/draws'){
     try{
       const params=u.searchParams;
@@ -169,14 +187,14 @@ const app=http.createServer(async(req,res)=>{
       const result=await official(s,'/admin/draws'+(query?'?'+query:'?startDate=2000-01-01&endDate=2099-12-31'));
       const d=extractData(result);
       const draws=Array.isArray(d)?d:(Array.isArray(d?.draws)?d.draws:[]);
-      return json(res,200,{success:true,draws});
+      return json(res,200,{success:true,draws},req);
     }catch(e){return sendError(res,e);}
   }
   if(req.method==='GET'&&u.pathname==='/api/sellers'){
     try{
       const ids=(u.searchParams.get('drawIds')||'').split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0);
-      if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio para carregar os vendedores.'});
-      if(ids.length>20)return json(res,400,{success:false,message:'Selecione no máximo 20 sorteios para listar vendedores.'});
+      if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio para carregar os vendedores.'},req);
+      if(ids.length>20)return json(res,400,{success:false,message:'Selecione no máximo 20 sorteios para listar vendedores.'},req);
       const jobId=crypto.randomBytes(16).toString('hex');
       const job={id:jobId,status:'running',message:'Consultando todos os lotes e páginas para localizar os vendedores participantes…',sellers:[],current:'Preparando consulta…',pagesDone:0,errors:[]};
       sellerJobs.set(jobId,{job,sessionId:String(req.headers['x-extrator-session']||'')});
@@ -197,37 +215,37 @@ const app=http.createServer(async(req,res)=>{
           if(errors.length&&!job.sellers.length){job.status='failed';job.message='Não foi possível concluir a consulta de vendedores.';job.errors=errors.slice(0,20);}else{job.status='complete';job.message=errors.length?'Lista encontrada, mas houve falhas parciais. Atualize para tentar novamente.':'Lista completa de vendedores carregada.';job.errors=errors.slice(0,20);}
         }catch(e){job.status='failed';job.message=e.message||'Falha ao consultar vendedores.';job.errors=[job.message];}
       })();
-      return json(res,202,{success:true,jobId,status:'running'});
+      return json(res,202,{success:true,jobId,status:'running'},req);
     }catch(e){return sendError(res,e);}
   }
   if(req.method==='GET'&&u.pathname==='/api/sellers/status'){
-    const id=u.searchParams.get('id')||'';const rec=sellerJobs.get(id);if(!rec||rec.sessionId!==String(req.headers['x-extrator-session']||''))return json(res,404,{success:false,message:'Consulta de vendedores não encontrada ou sessão diferente.'});
-    return json(res,200,{success:true,status:rec.job.status,message:rec.job.message,current:rec.job.current,pagesDone:rec.job.pagesDone,sellers:rec.job.sellers||[],errors:rec.job.errors||[]});
+    const id=u.searchParams.get('id')||'';const rec=sellerJobs.get(id);if(!rec||rec.sessionId!==String(req.headers['x-extrator-session']||''))return json(res,404,{success:false,message:'Consulta de vendedores não encontrada ou sessão diferente.'},req);
+    return json(res,200,{success:true,status:rec.job.status,message:rec.job.message,current:rec.job.current,pagesDone:rec.job.pagesDone,sellers:rec.job.sellers||[],errors:rec.job.errors||[]},req);
   }
   if(req.method==='POST'&&u.pathname==='/api/extract'){
     try{
       const requestKey=String(req.headers['x-extrator-request-id']||'').trim();
-      if(requestKey){const prior=extractionStartRequests.get(String(req.headers['x-extrator-session']||'')+':'+requestKey);if(prior&&extractionJobs.has(prior.jobId))return json(res,202,{success:true,jobId:prior.jobId,resumeToken:prior.resumeToken,status:'running',reused:true});}
+      if(requestKey){const prior=extractionStartRequests.get(String(req.headers['x-extrator-session']||'')+':'+requestKey);if(prior&&extractionJobs.has(prior.jobId))return json(res,202,{success:true,jobId:prior.jobId,resumeToken:prior.resumeToken,status:'running',reused:true},req);}
       const b=await body(req);const ids=Array.isArray(b.drawIds)?b.drawIds.map(Number).filter(n=>Number.isFinite(n)&&n>0):[];
-      if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio.'});
-      if(ids.length>50)return json(res,400,{success:false,message:'Selecione no máximo 50 sorteios por extração.'});
+      if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio.'},req);
+      if(ids.length>50)return json(res,400,{success:false,message:'Selecione no máximo 50 sorteios por extração.'},req);
       const jobId=crypto.randomBytes(18).toString('hex');
       const resumeToken=crypto.randomBytes(32).toString('hex');
       const job={id:jobId,status:'running',message:'Extração iniciada.',ticketsRead:0,pagesDone:0,current:'Preparando leitura…',contacts:[],contactsCount:0,errors:[],createdAt:Date.now()};
       extractionJobs.set(jobId,{job,sessionId:String(req.headers['x-extrator-session']||''),resumeToken});
       if(requestKey){const key=String(req.headers['x-extrator-session']||'')+':'+requestKey;extractionStartRequests.set(key,{jobId,resumeToken});if(extractionStartRequests.size>500){const first=extractionStartRequests.keys().next().value;extractionStartRequests.delete(first);}}
       runExtraction(s,b,job).catch(e=>{job.status='failed';job.message=e.message||'Falha inesperada';job.errors=[job.message];job.contacts=[];});
-      return json(res,202,{success:true,jobId,resumeToken,status:'running'});
+      return json(res,202,{success:true,jobId,resumeToken,status:'running'},req);
     }catch(e){return sendError(res,e);}
   }
   if(req.method==='GET'&&u.pathname==='/api/extract/status'){
     const jobId=u.searchParams.get('id')||'';const record=extractionJobs.get(jobId);
     const sameSession=record&&record.sessionId===String(req.headers['x-extrator-session']||'');
     const sameResumeToken=record&&record.resumeToken&&record.resumeToken===String(req.headers['x-extrator-resume']||'');
-    if(!record||(!sameSession&&!sameResumeToken))return json(res,404,{success:false,message:'Extração não encontrada ou autorização de retomada inválida.'});
+    if(!record||(!sameSession&&!sameResumeToken))return json(res,404,{success:false,message:'Extração não encontrada ou autorização de retomada inválida.'},req);
     const j=record.job;
-    return json(res,200,{success:true,status:j.status,message:j.message,current:j.current,ticketsRead:j.ticketsRead,pagesDone:j.pagesDone,contactsCount:j.contactsCount,contacts:j.status==='complete'?j.contacts:[],errors:j.errors||[]});
+    return json(res,200,{success:true,status:j.status,message:j.message,current:j.current,ticketsRead:j.ticketsRead,pagesDone:j.pagesDone,contactsCount:j.contactsCount,contacts:j.status==='complete'?j.contacts:[],errors:j.errors||[]},req);
   }
-  return json(res,404,{success:false,message:'Rota não encontrada.'});
+  return json(res,404,{success:false,message:'Rota não encontrada.'},req);
 });
 app.listen(PORT,'0.0.0.0',()=>console.log('Extrator Contatos RDS listening on '+PORT));
