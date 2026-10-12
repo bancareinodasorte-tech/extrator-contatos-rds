@@ -72,7 +72,7 @@ async function runExtraction(s, b, job) {
     const buyer=t.buyer??t.customer??null;
     const status=String(t.status??t.ticket_status??t.sale_status??'').toLowerCase();
     const hasBuyer=buyer!==null&&buyer!==undefined&&buyer!==''&&(typeof buyer!=='object'||Object.keys(buyer).length>0);
-    const soldStatuses=['sold','paid','approved','completed','finalized','finalised','vendido','pago','aprovado','concluido','concluído'];
+    const soldStatuses=['sold','paid','approved','completed','vendido','pago','aprovado','concluido','concluído'];
     if(!hasBuyer&&!soldStatuses.includes(status))return;
     const seller=t.seller??t.vendor??{};
     const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||seller.nome||t.sellerName||t.seller_name||'');
