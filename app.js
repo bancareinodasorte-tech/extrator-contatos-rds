@@ -18,39 +18,41 @@
     return data;
   }
   function loggedIn(on) {
-    $('draws').disabled=!on;$('seller').disabled=!on;$('reloadBtn').disabled=!on;$('extractBtn').disabled=!on;
+    $('draws').disabled=!on;$('seller').disabled=!on;$('reloadBtn').disabled=!on;$('extractBtn').disabled=!on;$('selectAllDraws').disabled=!on;$('clearDraws').disabled=!on;
     $('logoutBtn').hidden=!on;$('loginBtn').disabled=on;$('email').disabled=on;$('password').disabled=on;
     appState(on?'Conectado':'Aguardando login');
   }
   async function loadDraws() {
     setStatus('Buscando os sorteios disponíveis na conta oficial…');
-    const result=await api('/api/draws');const draws=result.draws||[];const select=$('draws');select.replaceChildren();
+    const result=await api('/api/draws');const draws=(result.draws||[]).filter(d=>String(d.draw_status||d.status||'').toLowerCase()==='finalized');const select=$('draws');select.replaceChildren();
     for(const d of draws){
       const id=d.id??d.draw_id??d.drawId;if(id===undefined||id===null)continue;
       const option=document.createElement('option');option.value=String(id);
       option.textContent='#'+id+' — '+(d.title||d.name||d.description||('Sorteio '+id))+(d.draw_date?' · '+new Date(d.draw_date).toLocaleDateString('pt-BR'):'')+(d.draw_status?' · '+d.draw_status:'');
       select.appendChild(option);
     }
-    if(!select.options.length){const o=document.createElement('option');o.textContent='Nenhum sorteio retornado pela API';select.appendChild(o);setStatus('A API autenticou, mas não retornou sorteios para esta conta.',true);}
+    if(!select.options.length){const o=document.createElement('option');o.textContent='Nenhum sorteio finalizado disponível';select.appendChild(o);setStatus('A API não retornou sorteios finalizados para esta conta.',true);}
     else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
     $('seller').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
     setProgress('Selecione um ou mais sorteios. Os vendedores participantes serão carregados automaticamente.');
     if(select.options.length){select.options[0].selected=true;await loadSellers();}
   }
   async function loadSellers(){
-    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');
-    const select=$('seller');select.replaceChildren();sellers=[];sellerDrawSignature=signature;
-    if(!drawIds.length){select.disabled=true;$('sellerInfo').textContent='Selecione ao menos um sorteio.';return;}
-    select.disabled=true;$('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Buscando vendedores participantes…';
-    try{const r=await api('/api/sellers?drawIds='+encodeURIComponent(signature));sellers=r.sellers||[];
-      if(!sellers.length){const o=document.createElement('option');o.textContent='Nenhum vendedor encontrado';select.appendChild(o);$('sellerInfo').textContent=r.note||'A API não retornou vendedores para os sorteios selecionados.';return;}
+    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const select=$('seller');select.replaceChildren();sellers=[];sellerDrawSignature=signature;
+    if(!drawIds.length){select.disabled=true;$('sellerInfo').textContent='Selecione ao menos um sorteio finalizado.';return;}
+    select.disabled=true;$('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Consultando todos os lotes e páginas para encontrar os vendedores…';
+    try{const started=await api('/api/sellers?drawIds='+encodeURIComponent(signature));let status=started;const startedAt=Date.now();
+      while(status.status==='running'){$('sellerInfo').textContent=(status.current||status.message||'Buscando vendedores…')+' · '+(status.pagesDone||0)+' páginas consultadas';if(Date.now()-startedAt>12*60*1000)throw new Error('A consulta demorou mais que o esperado. Use “Atualizar vendedores” para tentar novamente.');await new Promise(resolve=>setTimeout(resolve,1500));status=await api('/api/sellers/status?id='+encodeURIComponent(started.jobId));}
+      if(status.status!=='complete')throw new Error(status.message||'Não foi possível concluir a consulta.');sellers=status.sellers||[];
+      if(!sellers.length){const o=document.createElement('option');o.textContent='Nenhum vendedor encontrado';select.appendChild(o);$('sellerInfo').textContent=status.message||'A API não retornou vendedores para este sorteio.';return;}
       for(const s of sellers){const o=document.createElement('option');o.value=s.id;o.textContent=s.name;select.appendChild(o);}
-      $('sellerInfo').textContent=sellers.length+' vendedor(es) encontrado(s). Se não selecionar nenhum, a extração incluirá todos. Use “Selecionar todos” para escolher explicitamente todos os vendedores listados.';
-    }catch(e){$('sellerInfo').textContent='Não foi possível carregar vendedores: '+e.message;}
+      $('sellerInfo').textContent=sellers.length+' vendedor(es) encontrado(s). Se nenhum for marcado, serão incluídos todos. Use “Selecionar todos” para marcar a lista completa.'+(status.errors?.length?' Atenção: houve falhas parciais; atualize antes de extrair.':'');
+    }catch(e){$('sellerInfo').textContent='Não foi possível carregar a lista completa: '+e.message;}
     finally{select.disabled=false;$('reloadSellers').disabled=false;$('selectAllSellers').disabled=false;$('clearSellers').disabled=false;}
   }
   async function login() {
     const email=$('email').value.trim(),password=$('password').value;
+    if($('rememberPassword').checked){localStorage.setItem('rds_extrator_email',email);localStorage.setItem('rds_extrator_password',password);}else{localStorage.removeItem('rds_extrator_email');localStorage.removeItem('rds_extrator_password');}
     if(!email||!password)return setStatus('Informe o e-mail e a senha da conta oficial.',true);
     $('loginBtn').disabled=true;setStatus('Autenticando na API oficial da Reino da Sorte…');
     try{const result=await api('/api/login',{method:'POST',body:JSON.stringify({email,password})});session=result.session;sessionStorage.setItem('rds_extrator_session',session);$('password').value='';loggedIn(true);await loadDraws();}
@@ -83,11 +85,16 @@
   }
   function download(name,type,content){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function vcfEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');}
+  $('togglePassword').addEventListener('click',()=>{const p=$('password');const show=p.type==='password';p.type=show?'text':'password';$('togglePassword').textContent=show?'Ocultar':'Mostrar';$('togglePassword').setAttribute('aria-pressed',String(show));});
+  $('rememberPassword').addEventListener('change',()=>{if(!$('rememberPassword').checked){localStorage.removeItem('rds_extrator_email');localStorage.removeItem('rds_extrator_password');}});
   $('loginBtn').addEventListener('click',login);$('password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('email').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('logoutBtn').addEventListener('click',logout);
   $('reloadBtn').addEventListener('click',()=>loadDraws().catch(e=>setStatus(e.message,true)));$('extractBtn').addEventListener('click',extract);
+  $('selectAllDraws').addEventListener('click',()=>{[...$('draws').options].forEach(o=>o.selected=true);loadSellers();});$('clearDraws').addEventListener('click',()=>{[...$('draws').options].forEach(o=>o.selected=false);loadSellers();});
   $('draws').addEventListener('change',()=>loadSellers());$('reloadSellers').addEventListener('click',()=>loadSellers());
   $('selectAllSellers').addEventListener('click',()=>{[...$('seller').options].forEach(o=>o.selected=true);});$('clearSellers').addEventListener('click',()=>{[...$('seller').options].forEach(o=>o.selected=false);});
   $('vcfBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const data=contacts.map(c=>'BEGIN:VCARD\r\nVERSION:3.0\r\nN:'+vcfEscape(c.name)+';;;;\r\nFN:'+vcfEscape(c.name)+'\r\nTEL;TYPE=CELL:'+c.phone+'\r\nEND:VCARD').join('\r\n')+'\r\n';download('contatos-reino-da-sorte.vcf','text/vcard;charset=utf-8',data);});
   $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
+  if(localStorage.getItem('rds_extrator_email')){$('email').value=localStorage.getItem('rds_extrator_email');$('rememberPassword').checked=true;}
+  if(localStorage.getItem('rds_extrator_password'))$('password').value=localStorage.getItem('rds_extrator_password');
   if(session){loggedIn(true);loadDraws().catch(e=>{session='';sessionStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);});}else loggedIn(false);
 })();
