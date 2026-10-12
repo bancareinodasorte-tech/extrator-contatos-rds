@@ -68,12 +68,7 @@ function normalizePhone(value) {
   return "+" + n;
 }
 function getPhone(ticket) {
-  const candidates = [
-    ticket?.buyer?.phone, ticket?.buyer?.cellphone, ticket?.buyer?.mobile,
-    ticket?.customer?.phone, ticket?.customer?.cellphone, ticket?.phone,
-    ticket?.buyerPhone, ticket?.buyer_phone, ticket?.telephone,
-    ticket?.buyer?.telephone, ticket?.customer?.mobile
-  ];
+  const candidates = [ticket?.buyer?.phone, ticket?.buyer?.cellphone, ticket?.buyer?.mobile, ticket?.customer?.phone, ticket?.customer?.cellphone, ticket?.phone, ticket?.buyerPhone, ticket?.buyer_phone, ticket?.telephone, ticket?.buyer?.telephone, ticket?.customer?.mobile];
   return candidates.find(v => v != null && String(v).trim()) ?? "";
 }
 function getBuyerName(ticket) {
@@ -145,10 +140,11 @@ function unwrapTickets(response) {
   if (Array.isArray(data)) return data;
   return [];
 }
-function pageCount(response) {
+function paginationInfo(response) {
   const p = response?.data?.pagination ?? response?.pagination ?? {};
-  const total = Number(p.totalPages ?? p.total_pages ?? p.pages ?? 1);
-  return Number.isFinite(total) && total > 0 ? Math.min(total, 100000) : 1;
+  const totalPages = Number(p.totalPages ?? p.total_pages ?? p.pages ?? 0);
+  const total = Number(p.total ?? p.totalItems ?? p.totalRecords ?? 0);
+  return { totalPages: Number.isFinite(totalPages) && totalPages > 0 ? Math.min(totalPages, 100000) : null, total: Number.isFinite(total) && total >= 0 ? total : null, limit: Number(p.limit ?? 0) || null, page: Number(p.page ?? 0) || null };
 }
 async function extractSelected() {
   const draws = selectedDraws();
@@ -159,6 +155,8 @@ async function extractSelected() {
   let pageRequests = 0;
   const lots = [1, 2, 3, 4, 5];
   const errors = [];
+  let lotSuccesses = 0;
+  let lotFailures = 0;
   const started = Date.now();
   for (let di = 0; di < draws.length; di++) {
     const draw = draws[di];
@@ -171,12 +169,13 @@ async function extractSelected() {
           response = await apiGet("/admin/draws/" + encodeURIComponent(drawId(draw)) + "/lots/" + lot + "/tickets?page=" + page + "&limit=100");
         } catch (e) {
           // Lote ausente/inacessível não deve interromper todos os sorteios.
-          if (page === 1) { errors.push("Sorteio " + drawId(draw) + ", lote " + lot + ": " + e.message); break; }
+          if (page === 1) { lotFailures++; errors.push("Sorteio " + drawId(draw) + ", lote " + lot + ": " + e.message); break; }
           throw e;
         }
         pageRequests++;
         const tickets = unwrapTickets(response);
-        pages = pageCount(response);
+        const pg = paginationInfo(response);
+        pages = pg.totalPages || pages;
         for (const ticket of tickets) {
           ticketsSeen++;
           const seller = getSellerName(ticket);
@@ -185,17 +184,21 @@ async function extractSelected() {
           const phone = getPhone(ticket);
           if (phone) rows.push({ name, phone, seller, draw: drawLabel(draw) });
         }
-        if (tickets.length === 0 && page === 1 && pages === 1) break;
+        if (tickets.length === 0) break;
+        if (pg.totalPages && page >= pg.totalPages) break;
+        if (tickets.length < 100) break;
         page++;
         if (pageRequests % 10 === 0) log("Sorteio " + drawId(draw) + " · lote " + lot + " · página " + (page - 1) + "/" + pages + "\nBilhetes lidos: " + ticketsSeen);
       } while (page <= pages);
+      if (!errors.some(e => e.startsWith("Sorteio " + drawId(draw) + ", lote " + lot + ":"))) lotSuccesses++;
     }
   }
   resultContacts = deduplicateByPhone(rows);
-  $("summary").textContent = "Bilhetes lidos: " + ticketsSeen + "\nContatos com telefone válido e únicos: " + resultContacts.length + "\nRequisições de páginas: " + pageRequests + "\nTempo: " + Math.round((Date.now() - started) / 1000) + " s" + (errors.length ? "\nLotes com erro: " + errors.length : "");
-  $("export").disabled = !resultContacts.length;
-  $("csv").disabled = !resultContacts.length;
-  log("Extração encerrada. " + resultContacts.length + " contatos únicos." + (errors.length ? "\nAvisos:\n" + errors.slice(0, 12).join("\n") : ""));
+  $("summary").textContent = "Bilhetes lidos: " + ticketsSeen + "\nContatos com telefone válido e únicos: " + resultContacts.length + "\nRequisições de páginas: " + pageRequests + "\nTempo: " + Math.round((Date.now() - started) / 1000) + " s" + "\nLotes concluídos: " + lotSuccesses + " · falhas: " + lotFailures + (errors.length ? "\nLotes com erro: " + errors.length : "");
+  const complete = errors.length === 0 && lotFailures === 0;
+  $("export").disabled = !resultContacts.length || !complete;
+  $("csv").disabled = !resultContacts.length || !complete;
+  log((complete ? "Extração encerrada sem erros. " : "EXTRAÇÃO INCOMPLETA — exportação bloqueada. ") + resultContacts.length + " contatos únicos. Lotes concluídos: " + lotSuccesses + "; falhas: " + lotFailures + (errors.length ? "\nFalhas:\n" + errors.slice(0, 12).join("\n") : ""));
 }
 function escapeVCard(s) {
   return String(s ?? "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
