@@ -9,6 +9,7 @@ const API = 'https://api.reinodasorte.com.br';
 const sessions = new Map();
 const extractionJobs = new Map();
 const sellerJobs = new Map();
+const extractionStartRequests = new Map();
 const sessionTtl = 12 * 60 * 60 * 1000;
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 
@@ -205,6 +206,8 @@ const app=http.createServer(async(req,res)=>{
   }
   if(req.method==='POST'&&u.pathname==='/api/extract'){
     try{
+      const requestKey=String(req.headers['x-extrator-request-id']||'').trim();
+      if(requestKey){const prior=extractionStartRequests.get(String(req.headers['x-extrator-session']||'')+':'+requestKey);if(prior&&extractionJobs.has(prior.jobId))return json(res,202,{success:true,jobId:prior.jobId,resumeToken:prior.resumeToken,status:'running',reused:true});}
       const b=await body(req);const ids=Array.isArray(b.drawIds)?b.drawIds.map(Number).filter(n=>Number.isFinite(n)&&n>0):[];
       if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio.'});
       if(ids.length>50)return json(res,400,{success:false,message:'Selecione no máximo 50 sorteios por extração.'});
@@ -212,6 +215,7 @@ const app=http.createServer(async(req,res)=>{
       const resumeToken=crypto.randomBytes(32).toString('hex');
       const job={id:jobId,status:'running',message:'Extração iniciada.',ticketsRead:0,pagesDone:0,current:'Preparando leitura…',contacts:[],contactsCount:0,errors:[],createdAt:Date.now()};
       extractionJobs.set(jobId,{job,sessionId:String(req.headers['x-extrator-session']||''),resumeToken});
+      if(requestKey){const key=String(req.headers['x-extrator-session']||'')+':'+requestKey;extractionStartRequests.set(key,{jobId,resumeToken});if(extractionStartRequests.size>500){const first=extractionStartRequests.keys().next().value;extractionStartRequests.delete(first);}}
       runExtraction(s,b,job).catch(e=>{job.status='failed';job.message=e.message||'Falha inesperada';job.errors=[job.message];job.contacts=[];});
       return json(res,202,{success:true,jobId,resumeToken,status:'running'});
     }catch(e){return sendError(res,e);}
