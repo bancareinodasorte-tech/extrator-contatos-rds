@@ -86,8 +86,8 @@ async function runExtraction(s, b, job) {
             const buyer=t.buyer||t.customer||{};const seller=t.seller||t.vendor||{};
             const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||t.sellerName||t.seller_name||'');
             if(sellerFilter&&!String(sellerName).toLocaleLowerCase('pt-BR').includes(sellerFilter))continue;
-            const buyerName=typeof buyer==='string'?buyer:(buyer.name||buyer.fullName||buyer.full_name||buyer.nome||'');
-            const phone=typeof buyer==='object'?(buyer.phone||buyer.phoneNumber||buyer.phone_number||buyer.whatsapp||buyer.mobile||t.buyer_phone||t.phone||''):(t.buyer_phone||t.phone||'');
+            const buyerName=typeof buyer==='string'?buyer:(buyer.name||buyer.fullName||buyer.full_name||buyer.nome||t.buyerName||t.buyer_name||t.name||'');
+            const phone=typeof buyer==='object'?(buyer.phone||buyer.cellphone||buyer.mobile||buyer.telephone||buyer.phoneNumber||buyer.phone_number||buyer.whatsapp||t.buyerPhone||t.buyer_phone||t.telephone||t.phone||''):(t.buyerPhone||t.buyer_phone||t.telephone||t.phone||'');
             const normalized=normalizePhone(phone); if(!normalized)continue;
             if(!byPhone.has(normalized)){const name=String(buyerName||'').trim().toLocaleUpperCase('pt-BR').replace(/^CLIENTE\\s*/,'').trim();byPhone.set(normalized,{name:name||'SEM NOME',phone:normalized});}
           }
