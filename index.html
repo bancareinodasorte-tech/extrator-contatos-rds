@@ -24,7 +24,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;paddi
 </style>
 </head>
 <body>
-<header><div class="brand"><div class="logo">RDS</div><div><strong>Extrator de Contatos</strong><small>REINO DA SORTE · ÁREA DE EXTRAÇÃO</small></div></div><div class="state" id="appState">Integração em configuração</div></header>
+<header><div class="brand"><div class="logo">RDS</div><div><strong>Extrator de Contatos</strong><small>REINO DA SORTE · ÁREA DE EXTRAÇÃO</small></div></div><div class="state" id="appState">Aguardando login</div></header>
 <main>
 <div class="intro"><h1>Seus contatos, organizados.</h1><p>Selecione sorteios e vendedores, elimine números duplicados e prepare contatos para a agenda. A interface funciona no computador e em telas de celular.</p></div>
 <div class="layout">
@@ -33,17 +33,17 @@ footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;paddi
 <div class="step"><div class="num">1</div><div><b>Autorização segura</b><p>O sistema precisa autenticar nesta aplicação sem depender de uma extensão do navegador. A sessão da página oficial não é compartilhada automaticamente com este endereço.</p></div></div>
 <div class="step"><div class="num">2</div><div><b>Carregar sorteios</b><p>Após concluir a integração de autenticação, os sorteios e seus vendedores serão exibidos aqui para seleção.</p></div></div>
 <div class="step"><div class="num">3</div><div><b>Extrair e exportar</b><p>A extração percorrerá todos os lotes e páginas, deduplicará por telefone e liberará os arquivos apenas quando a leitura estiver completa.</p></div></div>
-<div class="statusbox" role="status"><b>Estado atual:</b> já confirmamos que a API oficial aceita a sessão do painel e retorna sorteios e bilhetes. A autenticação própria desta aplicação e a extração integral ainda não foram concluídas. Não informe sua senha nesta página.</div>
+<div class="statusbox" id="status" role="status">Entre com sua conta oficial. A senha será enviada diretamente à API oficial por HTTPS e não será salva pelo Extrator.</div><label for="email">E-mail da conta oficial</label><input id="email" type="email" autocomplete="username" placeholder="Seu e-mail"><label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" placeholder="Sua senha"><div class="actions"><button class="btn" id="loginBtn">Entrar e carregar sorteios</button><button class="btn alt" id="logoutBtn" hidden>Sair</button></div>
 <div class="actions"><button class="btn" id="installBtn" hidden>Instalar aplicativo</button></div>
 </section>
 <section class="card">
 <h2>Área de extração</h2>
-<p class="muted">Esta área será habilitada quando a autenticação independente estiver pronta. Ela não simula conexão nem apresenta resultados inventados.</p>
-<label for="draws">Sorteios disponíveis</label><select id="draws" disabled><option>Integração pendente</option></select>
-<label for="seller">Vendedor (opcional)</label><input id="seller" placeholder="Todos os vendedores" disabled>
-<div class="actions"><button class="btn" disabled>Carregar sorteios</button><button class="btn alt" disabled>Extrair contatos</button></div>
-<div class="metrics"><div class="metric"><strong>—</strong><span>Bilhetes lidos</span></div><div class="metric"><strong>—</strong><span>Contatos únicos</span></div><div class="metric"><strong>—</strong><span>Falhas</span></div></div>
-<div class="actions"><button class="btn" disabled>Exportar VCF</button><button class="btn alt" disabled>Exportar CSV</button></div>
+<p class="muted">Selecione um ou mais sorteios. A extração só libera exportação quando todas as páginas solicitadas forem lidas sem falhas.</p>
+<label for="draws">Sorteios disponíveis</label><select id="draws" multiple size="6" disabled><option>Entre para carregar sorteios</option></select>
+<label for="seller">Vendedor (opcional — filtra pelo nome)</label><input id="seller" placeholder="Todos os vendedores" disabled>
+<div class="actions"><button class="btn alt" id="reloadBtn" disabled>Atualizar sorteios</button><button class="btn" id="extractBtn" disabled>Extrair contatos selecionados</button></div>
+<div class="metrics"><div class="metric"><strong id="ticketsCount">0</strong><span>Bilhetes lidos</span></div><div class="metric"><strong id="contactsCount">0</strong><span>Contatos únicos</span></div><div class="metric"><strong id="errorsCount">0</strong><span>Falhas</span></div></div><div class="statusbox" id="progress">Aguardando autenticação.</div>
+<div class="actions"><button class="btn" id="vcfBtn" disabled>Exportar VCF</button><button class="btn alt" id="csvBtn" disabled>Exportar CSV</button></div>
 </section>
 </div>
 <section class="card bottom"><h2>O mesmo sistema em cada dispositivo</h2><p class="muted">A versão web será acessada por este link no computador, iPhone e Android. O APK Android será preparado a partir da mesma aplicação depois que a conexão e a extração estiverem funcionais. Não é necessário usar uma extensão do Chrome no uso final.</p></section>
@@ -56,5 +56,6 @@ window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();ins
 installBtn.addEventListener("click",async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installBtn.hidden=true;});
 if("serviceWorker" in navigator && location.protocol==="https:"){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}
 </script>
+<script src="/app.js"></script>
 </body>
 </html>
