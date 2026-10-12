@@ -7,6 +7,7 @@ const path = require('path');
 const PORT = process.env.PORT || 10000;
 const API = 'https://api.reinodasorte.com.br';
 const sessions = new Map();
+const extractionJobs = new Map();
 const sessionTtl = 12 * 60 * 60 * 1000;
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 
@@ -60,6 +61,48 @@ async function official(s, url, method='GET', data=null) {
 function extractData(result) { return result && result.data!==undefined ? result.data : result; }
 function sendError(res,e){json(res,e.status||500,{success:false,message:e.message||'Erro inesperado na integração oficial.'});}
 
+
+async function runExtraction(s, b, job) {
+  const ids=Array.isArray(b.drawIds)?b.drawIds.map(Number).filter(n=>Number.isFinite(n)&&n>0):[];
+  const sellerFilter=String(b.seller||'').trim().toLocaleLowerCase('pt-BR');
+  const byPhone=new Map(); let ticketsRead=0; const errors=[];
+  const normalizePhone=v=>{let n=String(v||'').replace(/\\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.length===10||n.length===11){if(!n.startsWith('55'))n='55'+n;}if(n.length<12||n.length>13)return '';return '+'+n;};
+  for(const drawId of ids){
+    let drawInfo=null;
+    try { const dr=extractData(await official(s,'/admin/draws/'+drawId)); drawInfo=dr?.draw||dr; } catch {}
+    let lots=[];
+    if(drawInfo&&Array.isArray(drawInfo.lots)&&drawInfo.lots.length) lots=drawInfo.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0);
+    else { const count=Number(drawInfo?.lotsCount??drawInfo?.totalLots??drawInfo?.lot_count??drawInfo?.lots); lots=Array.from({length:Math.max(1,Math.min(100,count||5))},(_,i)=>i+1); }
+    for(const lot of lots){
+      let page=1,totalPages=1;
+      do {
+        try {
+          const result=await official(s,'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit=100');
+          const d=extractData(result); const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);
+          const pagination=d?.pagination||result?.pagination||{};
+          totalPages=Math.max(1,Number(pagination.totalPages)||page);
+          for(const t of tickets){
+            ticketsRead++;
+            const buyer=t.buyer||{};const seller=t.seller||{};
+            const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||'');
+            if(sellerFilter&&!String(sellerName).toLocaleLowerCase('pt-BR').includes(sellerFilter))continue;
+            const buyerName=typeof buyer==='string'?buyer:(buyer.name||buyer.fullName||buyer.full_name||buyer.nome||'');
+            const phone=typeof buyer==='object'?(buyer.phone||buyer.phoneNumber||buyer.phone_number||buyer.whatsapp||buyer.mobile||t.buyer_phone||t.phone||''):(t.buyer_phone||t.phone||'');
+            const normalized=normalizePhone(phone); if(!normalized)continue;
+            if(!byPhone.has(normalized)){const name=String(buyerName||'').trim().toLocaleUpperCase('pt-BR').replace(/^CLIENTE\\s*/,'').trim();byPhone.set(normalized,{name:name||'SEM NOME',phone:normalized});}
+          }
+          job.ticketsRead=ticketsRead;job.pagesDone=(job.pagesDone||0)+1;job.current='Sorteio '+drawId+' · lote '+lot+' · página '+page+'/'+totalPages;
+        } catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página '+page+': '+e.message);break;}
+        page++;
+      } while(page<=totalPages);
+    }
+  }
+  if(errors.length){job.status='failed';job.message='A extração teve falhas; nenhum arquivo foi liberado.';job.errors=errors.slice(0,100);job.contacts=[];return;}
+  const grouped=new Map();for(const c of byPhone.values())grouped.set(c.name,(grouped.get(c.name)||0)+1);
+  const counts=new Map();const contacts=[];
+  for(const c of byPhone.values()){const n=(counts.get(c.name)||0)+1;counts.set(c.name,n);contacts.push({name:'CLIENTE '+c.name+(grouped.get(c.name)>1?' '+n:''),phone:c.phone});}
+  job.status='complete';job.message='Extração concluída sem falhas.';job.contacts=contacts;job.contactsCount=contacts.length;job.errors=[];job.ticketsRead=ticketsRead;
+}
 const app=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,X-Extrator-Session','Access-Control-Max-Age':'86400','Vary':'Origin'});return res.end();}
   const u=new URL(req.url,'http://localhost');
@@ -102,57 +145,18 @@ const app=http.createServer(async(req,res)=>{
       const b=await body(req);const ids=Array.isArray(b.drawIds)?b.drawIds.map(Number).filter(n=>Number.isFinite(n)&&n>0):[];
       if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio.'});
       if(ids.length>50)return json(res,400,{success:false,message:'Selecione no máximo 50 sorteios por extração.'});
-      const sellerFilter=String(b.seller||'').trim().toLocaleLowerCase('pt-BR');
-      const all=[];const errors=[];let ticketsRead=0;
-      for(const drawId of ids){
-        let drawInfo;
-        try{
-          const dr=extractData(await official(s,'/admin/draws/'+drawId));
-          drawInfo=dr?.draw||dr;
-        }catch(e){drawInfo=null;}
-        let lots=[];
-        if(drawInfo&&Array.isArray(drawInfo.lots)&&drawInfo.lots.length){
-          lots=drawInfo.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0);
-        }else{
-          const count=Number(drawInfo?.lotsCount??drawInfo?.totalLots??drawInfo?.lot_count??drawInfo?.lots);
-          lots=Array.from({length:Math.max(1,Math.min(100,count||5))},(_,i)=>i+1);
-        }
-        for(const lot of lots){
-          let page=1,totalPages=1;
-          do{
-            try{
-              const result=await official(s,'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit=100');
-              const d=extractData(result);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);
-              const pagination=d?.pagination||result?.pagination||{};
-              totalPages=Math.max(1,Number(pagination.totalPages)||page);
-              for(const t of tickets){
-                ticketsRead++;
-                const buyer=t.buyer||{};const seller=t.seller||{};
-                const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||'');
-                if(sellerFilter&&!String(sellerName).toLocaleLowerCase('pt-BR').includes(sellerFilter))continue;
-                const buyerName=typeof buyer==='string'?buyer:(buyer.name||buyer.fullName||buyer.full_name||buyer.nome||'');
-                const phone=typeof buyer==='object'?(buyer.phone||buyer.phoneNumber||buyer.phone_number||buyer.whatsapp||buyer.mobile||''):(t.buyer_phone||t.phone||'');
-                all.push({name:String(buyerName||'').trim(),phone:String(phone||'').trim(),drawId,lot,ticketNumber:t.ticket_number??t.ticketNumber??'',sellerName:String(sellerName||'').trim()});
-              }
-            }catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página '+page+': '+e.message);break;}
-            page++;
-          }while(page<=totalPages);
-        }
-      }
-      if(errors.length)return json(res,200,{success:false,message:'A extração teve falhas. Os arquivos não foram liberados; corrija a conexão e tente novamente.',ticketsRead,errors:errors.slice(0,100),contacts:[]});
-      const normalizePhone=v=>{let n=String(v||'').replace(/\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.length===10||n.length===11){if(!n.startsWith('55'))n='55'+n;}if(n.length<12||n.length>13)return '';return '+'+n;};
-      const byPhone=new Map();
-      for(const t of all){
-        const phone=normalizePhone(t.phone);if(!phone)continue;
-        const name=t.name.toLocaleUpperCase('pt-BR').replace(/^CLIENTE\s*/,'').trim();
-        if(!byPhone.has(phone))byPhone.set(phone,{name:name||'SEM NOME',phone});
-      }
-      const grouped=new Map();
-      for(const c of byPhone.values()){const base=c.name;grouped.set(base,(grouped.get(base)||0)+1);c._base=base;}
-      const counts=new Map();const contacts=[];
-      for(const c of byPhone.values()){const n=(counts.get(c._base)||0)+1;counts.set(c._base,n);contacts.push({name:'CLIENTE '+c._base+(grouped.get(c._base)>1?' '+n:''),phone:c.phone});}
-      return json(res,200,{success:true,ticketsRead,contactsCount:contacts.length,contacts,errors:[]});
+      const jobId=crypto.randomBytes(18).toString('hex');
+      const job={id:jobId,status:'running',message:'Extração iniciada.',ticketsRead:0,pagesDone:0,current:'Preparando leitura…',contacts:[],contactsCount:0,errors:[],createdAt:Date.now()};
+      extractionJobs.set(jobId,{job,sessionId:String(req.headers['x-extrator-session']||'')});
+      runExtraction(s,b,job).catch(e=>{job.status='failed';job.message=e.message||'Falha inesperada';job.errors=[job.message];job.contacts=[];});
+      return json(res,202,{success:true,jobId,status:'running'});
     }catch(e){return sendError(res,e);}
+  }
+  if(req.method==='GET'&&u.pathname==='/api/extract/status'){
+    const jobId=u.searchParams.get('id')||'';const record=extractionJobs.get(jobId);
+    if(!record||record.sessionId!==String(req.headers['x-extrator-session']||''))return json(res,404,{success:false,message:'Extração não encontrada ou sessão diferente.'});
+    const j=record.job;
+    return json(res,200,{success:true,status:j.status,message:j.message,current:j.current,ticketsRead:j.ticketsRead,pagesDone:j.pagesDone,contactsCount:j.contactsCount,contacts:j.status==='complete'?j.contacts:[],errors:j.errors||[]});
   }
   return json(res,404,{success:false,message:'Rota não encontrada.'});
 });
