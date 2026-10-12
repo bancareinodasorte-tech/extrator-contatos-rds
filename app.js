@@ -140,7 +140,33 @@
     }catch(e){$('errorsCount').textContent='1';setProgress('Falha: '+e.message+'\nExportação bloqueada para evitar arquivo incompleto.');}
     finally{if(workflowStage==='extracting')setWorkflow('extract');}
   }
-  function download(name,type,content){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.rel='noopener';a.style.display='none';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+  async function download(name,type,content){
+    const isNative=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
+    if(isNative){
+      try{
+        const plugins=window.Capacitor.Plugins||{};
+        const fs=plugins.Filesystem;
+        if(!fs||!fs.writeFile)throw new Error('Recurso de gravação não disponível no aplicativo.');
+        const base64=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();
+          reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');
+          reader.onerror=()=>reject(new Error('Não foi possível preparar o arquivo.'));
+          reader.readAsDataURL(new Blob([content],{type}));
+        });
+        const result=await fs.writeFile({path:name,data:base64,directory:'DOCUMENTS',recursive:true});
+        setProgress('Arquivo salvo no Android: '+(result.uri||name)+'. Abra Downloads/Documentos ou use o gerenciador de arquivos do aparelho.');
+        return;
+      }catch(e){
+        setProgress('Não foi possível salvar diretamente no Android: '+e.message+'. Tente usar Compartilhar/Salvar arquivo.');
+        try{
+          const file=new File([content],name,{type});
+          if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return;}
+        }catch{}
+        return;
+      }
+    }
+    const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.rel='noopener';a.style.display='none';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
   async function exportVcf(){if(!canExport||!contacts.length)return;const data=contacts.map(c=>{const phone=String(c.phone||'').replace(/\D/g,'');return 'BEGIN:VCARD\r\nVERSION:3.0\r\nN:'+vcfEscape(c.name)+';;;;\r\nFN:'+vcfEscape(c.name)+'\r\nTEL;TYPE=CELL:+55'+phone+'\r\nEND:VCARD';}).join('\r\n')+'\r\n';const filename='contatos-reino-da-sorte.vcf';const file=new File([data],'contatos-reino-da-sorte.vcf',{type:'text/vcard;charset=utf-8'});try{if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:filename});setProgress('Arquivo VCF preparado. No menu do iPhone, escolha “Salvar em Arquivos” para guardar ou “Contatos” para importar.');return;}}catch(e){if(e.name==='AbortError')return;}
     download(filename,'text/vcard;charset=utf-8',data);setProgress('Download VCF solicitado. Se o iPhone abrir o cartão em vez de baixar, toque em Compartilhar e escolha “Salvar em Arquivos” ou “Contatos”.');}
   function vcfEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');}
