@@ -73,7 +73,7 @@ async function runExtraction(s, b, job) {
     if(n.startsWith('55')&&(n.length===12||n.length===13))n=n.slice(2);
     if(n.length===12&&n.startsWith('0'))n=n.slice(1);
     if(n.length!==10&&n.length!==11)return '';
-    const ddd=Number(n.slice(0,2));if(ddd<11||ddd>99)return '';
+    const ddd=Number(n.slice(0,2));const validDdds=new Set([11,12,13,14,15,16,17,18,19,21,22,24,27,28,31,32,33,34,35,37,38,41,42,43,44,45,46,47,48,49,51,53,54,55,61,62,63,64,65,66,67,68,69,71,73,74,75,77,79,81,82,83,84,85,86,87,88,89,91,92,93,94,95,96,97,98,99]);if(!validDdds.has(ddd))return '';
     const subscriber=n.slice(2);
     if(n.length===11){if(subscriber[0]!=='9')return '';}
     else if(!/^[2-5]/.test(subscriber))return '';
