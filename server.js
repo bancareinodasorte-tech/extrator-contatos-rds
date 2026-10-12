@@ -136,7 +136,7 @@ async function runExtraction(s, b, job) {
   job.status='complete';job.message='Leitura concluída sem falhas.';job.contacts=contacts;job.contactsCount=contacts.length;job.errors=[];job.ticketsRead=ticketsRead;
 }
 const app=http.createServer(async(req,res)=>{
-  if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,X-Extrator-Session,X-Extrator-Resume','Access-Control-Max-Age':'86400','Vary':'Origin'});return res.end();}
+  if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,X-Extrator-Session,X-Extrator-Resume,X-Extrator-Request-Id','Access-Control-Max-Age':'86400','Vary':'Origin'});return res.end();}
   const u=new URL(req.url,'http://localhost');
   if(req.method==='GET'&&u.pathname==='/api/health')return json(res,200,{success:true,service:'extrator-contatos-rds'});
   if(req.method==='POST'&&u.pathname==='/api/login'){
