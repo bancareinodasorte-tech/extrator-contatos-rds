@@ -26,31 +26,45 @@ label{display:block;font-size:12px;color:#d1deec;margin:9px 0 4px}input,select{w
 .checkbox-list{display:flex;flex-direction:column;gap:0;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel2);padding:4px}.seller-check{display:flex;align-items:flex-start;gap:10px;padding:10px 9px;margin:0;border-bottom:1px solid #213954;cursor:pointer;font-size:13px;line-height:1.35}.seller-check:last-child{border-bottom:0}.seller-check input{flex:0 0 19px;width:19px;height:19px;min-height:19px;margin:0;accent-color:var(--blue)}.seller-check span{overflow-wrap:anywhere}.password-row{display:flex;gap:8px;align-items:stretch}.password-row input{min-width:0;flex:1}.password-row .btn{min-width:88px}.remember{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px}.remember input{width:16px;min-height:16px;margin:0}.security-note{font-size:11px;margin:5px 0}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:9px}.metric{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px}.metric strong{display:block;font-size:19px}.metric span{font-size:11px;color:var(--muted)}
 .bottom{margin-top:12px}.selection-summary{margin:9px 0 5px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);font-size:12px;line-height:1.6;color:#d8e6f5}.preview-table-wrap{overflow:auto;max-height:55vh;border:1px solid var(--line);border-radius:10px}.preview-table{width:100%;border-collapse:collapse;font-size:12px}.preview-table th,.preview-table td{text-align:left;padding:9px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.preview-table th{position:sticky;top:0;background:#1b3049}.preview-search{margin:10px 0}.hidden{display:none!important}
 footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;padding:22px 16px 30px}
-@media(max-width:760px){.layout{grid-template-columns:1fr}.state{white-space:nowrap;text-align:center;max-width:none}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.metric{padding:9px}.metric strong{font-size:17px}}.state{white-space:normal;text-align:center;max-width:130px}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.metric{padding:9px}.metric strong{font-size:17px}}
+@media(max-width:760px){
+ .layout{grid-template-columns:1fr}
+ main{padding:12px}
+ .card{padding:13px}
+ .metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .metric{padding:9px}
+ .metric strong{font-size:17px}
+}
 @media(max-width:520px){
- header{padding:9px 12px;min-height:0;flex-wrap:wrap;gap:7px}
- .brand{flex:1 1 100%;width:100%;gap:9px}
- .logo-image{flex:0 0 40px;width:40px;height:38px}
- .brand strong{font-size:14px}
- .brand small{font-size:10px;max-width:100%}
- .header-actions{width:100%;flex:1 1 100%;justify-content:flex-end;gap:7px}
- .header-actions .btn{min-height:34px;padding:7px 11px;font-size:11px}
- .state{font-size:10px;padding:7px 10px}
+ header{padding:10px 12px;min-height:0;display:flex;flex-direction:column;align-items:stretch;gap:8px}
+ .brand{display:flex;align-items:center;gap:9px;width:100%;min-width:0;flex:0 0 auto}
+ .logo-image{width:42px;height:40px;flex:0 0 42px;object-fit:contain}
+ .brand>div{flex:1;min-width:0}
+ .brand strong{font-size:15px;line-height:1.2;white-space:nowrap}
+ .brand small{font-size:10px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .header-actions{width:100%;display:flex;flex:0 0 auto;justify-content:space-between;align-items:center;gap:8px}
+ .header-actions .btn{min-height:35px;padding:7px 12px;font-size:12px}
+ .state{max-width:none;font-size:10px;padding:7px 10px;white-space:nowrap}
  main{padding:10px}
- .card{padding:11px;border-radius:12px}
- .card h2{font-size:14px;margin-bottom:9px}
- .btn{min-height:38px;padding:9px 12px;font-size:12px;border-radius:9px}
- .actions{gap:7px}
- label{margin:8px 0 4px}
+ .layout{gap:10px}
+ .card{padding:12px;border-radius:12px}
+ .card h2{font-size:15px;margin-bottom:9px}
+ .btn{min-height:38px;padding:9px 11px;font-size:12px;border-radius:9px}
+ .actions{gap:7px;margin-top:8px}
+ .actions .btn{flex:0 1 auto;max-width:100%}
+ label{margin:8px 0 4px;font-size:12px}
  input,select{min-height:39px;padding:9px 10px;font-size:13px}
+ .password-row{gap:7px}
+ .password-row .btn{min-width:75px}
  .checkbox-list{max-height:230px}
  .seller-check{padding:9px 8px;font-size:12px}
  .selection-summary{font-size:12px;line-height:1.45}
  .metrics{gap:6px}
- .metric{padding:8px}
- .metric strong{font-size:16px}
- .metric span{font-size:10px}
-}.header-actions{gap:5px}.header-actions .btn{min-height:32px;padding:6px 7px;font-size:10px}.logo-image{flex-basis:44px;width:44px;height:42px}.brand{gap:8px}.brand strong{font-size:13px}.brand small{max-width:165px;font-size:9px}.state{font-size:9px;padding:6px 8px;max-width:105px}main{padding:9px}.card{padding:11px}.btn{min-height:40px;padding:9px 11px;font-size:12px}}
+ .metric{padding:8px;min-width:0}
+ .metric strong{font-size:16px;overflow-wrap:anywhere}
+ .metric span{font-size:10px;line-height:1.35}
+ .statusbox{font-size:12px;overflow-wrap:anywhere}
+ footer{padding:18px 12px 24px}
+}
 </style>
 </head>
 <body>
@@ -84,7 +98,7 @@ window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();ins
 installBtn.addEventListener("click",async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installBtn.hidden=true;});
 if("serviceWorker" in navigator && location.protocol==="https:"){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}
 </script>
-<script src="/app.js?v=21"></script>
+<script src="/app.js?v=22"></script>
 <script>window.addEventListener("error",function(e){var s=document.getElementById("status");if(s&&e.message)s.textContent="Erro interno do aplicativo: "+e.message;});window.addEventListener("unhandledrejection",function(e){var s=document.getElementById("status");if(s)s.textContent="Falha de conexão: "+(e.reason&&e.reason.message?e.reason.message:String(e.reason));});</script>
 </body>
 </html>
