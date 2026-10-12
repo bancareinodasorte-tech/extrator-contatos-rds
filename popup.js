@@ -37,8 +37,8 @@ function unwrapList(data) {
 function drawId(d) { return d?.id ?? d?.drawId ?? d?.draw_id ?? d?.sorteioId; }
 function drawLabel(d) {
   const id = drawId(d);
-  const name = d?.name ?? d?.title ?? d?.description ?? d?.drawName ?? d?.draw_name ?? "";
-  const status = d?.status ? " · " + d.status : "";
+  const name = d?.title ?? d?.name ?? d?.description ?? d?.drawName ?? d?.draw_name ?? "";
+  const status = (d?.draw_status ?? d?.status) ? " · " + (d?.draw_status ?? d?.status) : "";
   return (name ? String(name) + " — " : "Sorteio ") + id + status;
 }
 async function getTokenFromOfficialTab() {
@@ -127,7 +127,7 @@ async function loadDraws() {
     const text = document.createElement("span");
     text.textContent = drawLabel(draw);
     const small = document.createElement("small");
-    small.textContent = draw?.status ? "Status: " + draw.status : "ID: " + drawId(draw);
+    small.textContent = "ID: " + drawId(draw) + ((draw?.draw_status ?? draw?.status) ? " · Status: " + (draw?.draw_status ?? draw?.status) : "");
     text.appendChild(small); label.append(input, text); $("draws").appendChild(label);
   }
   $("extract").disabled = false;
@@ -139,13 +139,14 @@ function selectedDraws() {
   return allDraws.filter(d => ids.includes(String(drawId(d))));
 }
 function unwrapTickets(response) {
+  const data = response?.data;
+  if (Array.isArray(data?.tickets)) return data.tickets;
   if (Array.isArray(response?.tickets)) return response.tickets;
-  if (Array.isArray(response?.data?.tickets)) return response.data.tickets;
-  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(data)) return data;
   return [];
 }
 function pageCount(response) {
-  const p = response?.pagination ?? response?.data?.pagination ?? {};
+  const p = response?.data?.pagination ?? response?.pagination ?? {};
   const total = Number(p.totalPages ?? p.total_pages ?? p.pages ?? 1);
   return Number.isFinite(total) && total > 0 ? Math.min(total, 100000) : 1;
 }
