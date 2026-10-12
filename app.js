@@ -7,7 +7,7 @@
   let sellers = [];
   let sellerDrawSignature = '';
   const normalizeSellerName = name => String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
-  function updateSelectionSummary(){const draws=[...$('draws').selectedOptions].length;const options=[...document.querySelectorAll('#sellerCheckboxes input.seller-option')];const selected=options.filter(o=>o.checked).length;$('selectionSummary').textContent=draws+' sorteio(s) selecionado(s) · '+options.length+' vendedores ativos · '+selected+' selecionado(s) · Total '+selected+'/'+options.length;}
+  function updateSelectionSummary(){const draws=[...$('draws').selectedOptions].length;const options=[...document.querySelectorAll('#sellerCheckboxes input.seller-option')];const selected=options.filter(o=>o.checked).length;const total=sellers.length||options.length;$('selectionSummary').textContent=draws+' sorteio(s) selecionado(s) · '+total+' vendedores ativos · '+selected+' selecionado(s) · Total '+selected+'/'+total;}
   const setStatus = (message, bad=false) => { $('status').textContent=message; $('status').style.color=bad?'#ff9b9b':''; };
   const setProgress = message => $('progress').textContent=message;
   const appState = text => $('appState').textContent=text;
@@ -45,7 +45,7 @@
     $('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Consultando todos os lotes e páginas para encontrar os vendedores…';
     try{const started=await api('/api/sellers?drawIds='+encodeURIComponent(signature));let status=started;const startedAt=Date.now();
       while(status.status==='running'){$('sellerInfo').textContent=(status.current||status.message||'Buscando vendedores…')+' · '+(status.pagesDone||0)+' páginas consultadas';if(Date.now()-startedAt>12*60*1000)throw new Error('A consulta demorou mais que o esperado. Use “Atualizar vendedores” para tentar novamente.');await new Promise(resolve=>setTimeout(resolve,1500));status=await api('/api/sellers/status?id='+encodeURIComponent(started.jobId));}
-      if(status.status!=='complete')throw new Error(status.message||'Não foi possível concluir a consulta.');sellers=status.sellers||[];
+      if(status.status!=='complete')throw new Error(status.message||'Não foi possível concluir a consulta.');const unique=new Map();for(const item of (status.sellers||[])){const key=normalizeSellerName(item.name);if(!key)continue;const previous=unique.get(key);if(!previous||String(item.name).length>String(previous.name).length)unique.set(key,item);}sellers=[...unique.values()].sort((x,y)=>x.name.localeCompare(y.name,'pt-BR'));
       if(!sellers.length){list.innerHTML='<p class="muted">Nenhum vendedor encontrado.</p>';$('sellerInfo').textContent=status.message||'A API não retornou vendedores para este sorteio.';return;}
       for(const s of sellers){const label=document.createElement('label');label.className='seller-check';const input=document.createElement('input');input.type='checkbox';input.value=normalizeSellerName(s.name);input.dataset.sellerName=s.name;input.className='seller-option';const name=document.createElement('span');name.textContent=s.name;label.append(input,name);list.appendChild(label);}updateSelectionSummary();
       $('sellerInfo').textContent=sellers.length+' vendedor(es) encontrado(s). Marque as caixas dos vendedores desejados. Se nenhuma caixa for marcada, serão incluídos todos.'+(status.errors?.length?' Atenção: houve falhas parciais; atualize antes de extrair.':'');
