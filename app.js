@@ -8,6 +8,42 @@
   let sellerDrawSignature = '';
   let workflowStage='draws';
   let activeExtractionJob=localStorage.getItem('rds_extrator_active_job')||'';
+  const CONTACTS_DB_NAME='rds-extrator-local';
+  const CONTACTS_DB_VERSION=1;
+  function openContactsDB(){
+    return new Promise((resolve,reject)=>{
+      if(!('indexedDB' in window)){reject(new Error('O armazenamento local deste dispositivo não está disponível.'));return;}
+      const request=indexedDB.open(CONTACTS_DB_NAME,CONTACTS_DB_VERSION);
+      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('results'))db.createObjectStore('results',{keyPath:'id'});};
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>reject(request.error||new Error('Não foi possível abrir o armazenamento local.'));
+    });
+  }
+  async function saveContactsLocally(list,stats={}){
+    const db=await openContactsDB();
+    try{await new Promise((resolve,reject)=>{
+      const tx=db.transaction('results','readwrite');
+      tx.objectStore('results').put({id:'latest',contacts:list,savedAt:new Date().toISOString(),ticketsRead:Number(stats.ticketsRead||0)});
+      tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Falha ao gravar os contatos localmente.'));tx.onabort=()=>reject(tx.error||new Error('Gravação local cancelada.'));
+    });}finally{db.close();}
+  }
+  async function restoreContactsLocally(){
+    const db=await openContactsDB();
+    try{
+      const saved=await new Promise((resolve,reject)=>{
+        const tx=db.transaction('results','readonly');const request=tx.objectStore('results').get('latest');
+        request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error||new Error('Falha ao recuperar os contatos locais.'));
+      });
+      if(!saved||!Array.isArray(saved.contacts)||!saved.contacts.length)return false;
+      contacts=saved.contacts;canExport=true;
+      $('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
+      if(saved.ticketsRead)$('ticketsCount').textContent=Number(saved.ticketsRead).toLocaleString('pt-BR');
+      $('vcfBtn').disabled=false;$('csvBtn').disabled=false;$('previewBtn').disabled=false;$('previewBtn').hidden=false;
+      const savedDate=saved.savedAt?new Date(saved.savedAt).toLocaleString('pt-BR'):'data não registrada';
+      setProgress('Resultado anterior recuperado do armazenamento local: '+contacts.length.toLocaleString('pt-BR')+' contatos únicos. Salvo em '+savedDate+'. Você pode exportar sem refazer a extração.');
+      return true;
+    }finally{db.close();}
+  }
   const normalizeSellerName = name => String(name||'').replace(/\uFFFD/g,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
   function updateSelectionSummary(){const draws=[...$('draws').selectedOptions].length;const options=[...document.querySelectorAll('#sellerCheckboxes input.seller-option')];const selected=options.filter(o=>o.checked).length;const total=sellers.length||options.length;$('selectionSummary').textContent=draws+' sorteio(s) selecionado(s) · '+total+' vendedores ativos · '+selected+' selecionado(s) · Total '+selected+'/'+total;}
   const refreshApp = async () => {
@@ -136,7 +172,8 @@
       if(result.status!=='complete'||(result.errors||[]).length){setProgress((result.message||'A extração teve falhas.')+'\n'+(result.errors||[]).slice(0,8).join('\n'));return;}
       contacts=result.contacts||[];canExport=true;$('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
       $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;$('previewBtn').disabled=!contacts.length;$('previewBtn').hidden=!contacts.length;
-      setProgress('Concluído sem falhas: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos analisados e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido.');
+      await saveContactsLocally(contacts,{ticketsRead:result.ticketsRead||0});
+      setProgress('Concluído sem falhas: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos analisados e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido. Resultado guardado neste dispositivo para recuperação se o aplicativo for fechado.');
     }catch(e){$('errorsCount').textContent='1';setProgress('Falha: '+e.message+'\nExportação bloqueada para evitar arquivo incompleto.');}
     finally{if(workflowStage==='extracting')setWorkflow('extract');}
   }
@@ -179,6 +216,7 @@
   $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
   if(localStorage.getItem('rds_extrator_email')){$('email').value=localStorage.getItem('rds_extrator_email');$('rememberPassword').checked=true;}
   if(localStorage.getItem('rds_extrator_password'))$('password').value=localStorage.getItem('rds_extrator_password');
+  restoreContactsLocally().catch(e=>setStatus('Aviso: não foi possível recuperar contatos salvos localmente. '+e.message,true));
   if(session){loggedIn(true);loadDraws().then(()=>{if(activeExtractionJob)resumeExtraction(activeExtractionJob);}).catch(async e=>{if(e.message.includes('Sessão expirada')&&localStorage.getItem('rds_extrator_email')&&localStorage.getItem('rds_extrator_password')){try{const result=await fetch(API_BASE+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:localStorage.getItem('rds_extrator_email'),password:localStorage.getItem('rds_extrator_password')})});const data=await result.json();if(!result.ok||!data.session)throw new Error(data.message||'Não foi possível renovar a sessão.');session=data.session;localStorage.setItem('rds_extrator_session',session);loggedIn(true);await loadDraws();if(activeExtractionJob){resumeExtraction(activeExtractionJob);setStatus('Conexão restabelecida. Retomando o acompanhamento da extração anterior.');}else setStatus('Conexão restabelecida. Confira os sorteios antes de iniciar uma nova extração.');return;}catch(recoveryError){setStatus('A sessão foi perdida. Entre novamente para continuar: '+recoveryError.message,true);}}else setStatus(e.message,true);session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');loggedIn(false);});}else loggedIn(false);
   async function resumeExtraction(jobId){
     setWorkflow('extracting');setProgress('Reconectando à extração que já estava em andamento…');
@@ -195,8 +233,9 @@
       if(result.status==='complete'&&!(result.errors||[]).length){
         contacts=result.contacts||[];canExport=true;
         $('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
-        $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;$('previewBtn').hidden=!contacts.length;
-        setProgress('Concluído: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos.');
+        $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;$('previewBtn').disabled=!contacts.length;$('previewBtn').hidden=!contacts.length;
+        await saveContactsLocally(contacts,{ticketsRead:result.ticketsRead||0});
+        setProgress('Concluído: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos. Resultado guardado neste dispositivo.');
       }else setProgress(result.message||'A extração não pôde ser recuperada.');
     }catch(e){setProgress('Não foi possível recuperar automaticamente: '+e.message+' Se o servidor reiniciou, o trabalho pode ter sido perdido.');}
     finally{setWorkflow('extract');}
