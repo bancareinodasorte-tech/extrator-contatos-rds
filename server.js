@@ -80,7 +80,7 @@ async function official(s, url, method='GET', data=null) {
   }
 }
 function extractData(result) { return result && result.data!==undefined ? result.data : result; }
-function sendError(res,e){json(res,e.status||500,{success:false,message:e.message||'Erro inesperado na integração oficial.'});}
+function sendError(res,e,req=null){json(res,e.status||500,{success:false,message:e.message||'Erro inesperado na integração oficial.'},req);}
 
 
 async function runExtraction(s, b, job) {
@@ -168,7 +168,7 @@ const app=http.createServer(async(req,res)=>{
       const id=crypto.randomBytes(32).toString('hex');
       sessions.set(id,{accessToken:d.accessToken,refreshToken:d.refreshToken||null,deviceId,createdAt:Date.now(),lastSeenAt:Date.now()});
       return json(res,200,{success:true,session:id,user:d.user||d.admin||null},req);
-    }catch(e){return sendError(res,e);}
+    }catch(e){return sendError(res,e,req);}
   }
   if(req.method==='POST'&&u.pathname==='/api/logout'){
     const id=(req.headers['x-extrator-session']||'').toString();sessions.delete(id);return json(res,200,{success:true},req);
@@ -188,7 +188,7 @@ const app=http.createServer(async(req,res)=>{
       const d=extractData(result);
       const draws=Array.isArray(d)?d:(Array.isArray(d?.draws)?d.draws:[]);
       return json(res,200,{success:true,draws},req);
-    }catch(e){return sendError(res,e);}
+    }catch(e){return sendError(res,e,req);}
   }
   if(req.method==='GET'&&u.pathname==='/api/sellers'){
     try{
@@ -216,7 +216,7 @@ const app=http.createServer(async(req,res)=>{
         }catch(e){job.status='failed';job.message=e.message||'Falha ao consultar vendedores.';job.errors=[job.message];}
       })();
       return json(res,202,{success:true,jobId,status:'running'},req);
-    }catch(e){return sendError(res,e);}
+    }catch(e){return sendError(res,e,req);}
   }
   if(req.method==='GET'&&u.pathname==='/api/sellers/status'){
     const id=u.searchParams.get('id')||'';const rec=sellerJobs.get(id);if(!rec||rec.sessionId!==String(req.headers['x-extrator-session']||''))return json(res,404,{success:false,message:'Consulta de vendedores não encontrada ou sessão diferente.'},req);
@@ -236,7 +236,7 @@ const app=http.createServer(async(req,res)=>{
       if(requestKey){const key=String(req.headers['x-extrator-session']||'')+':'+requestKey;extractionStartRequests.set(key,{jobId,resumeToken});if(extractionStartRequests.size>500){const first=extractionStartRequests.keys().next().value;extractionStartRequests.delete(first);}}
       runExtraction(s,b,job).catch(e=>{job.status='failed';job.message=e.message||'Falha inesperada';job.errors=[job.message];job.contacts=[];});
       return json(res,202,{success:true,jobId,resumeToken,status:'running'},req);
-    }catch(e){return sendError(res,e);}
+    }catch(e){return sendError(res,e,req);}
   }
   if(req.method==='GET'&&u.pathname==='/api/extract/status'){
     const jobId=u.searchParams.get('id')||'';const record=extractionJobs.get(jobId);
