@@ -51,13 +51,26 @@
   async function loadSellers(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const list=$('sellerCheckboxes');list.replaceChildren();sellers=[];sellerDrawSignature=signature;updateSelectionSummary();
     if(!drawIds.length){list.innerHTML='<p class="muted">Selecione ao menos um sorteio finalizado.</p>';$('sellerInfo').textContent='Selecione ao menos um sorteio finalizado.';return;}
-    setWorkflow('loading-sellers');$('sellerInfo').textContent='Etapa 2 de 3 · identificando vendedores participantes dos sorteios selecionados…';
-    try{const started=await api('/api/sellers?drawIds='+encodeURIComponent(signature));let status=started;const startedAt=Date.now();
-      while(status.status==='running'){$('sellerInfo').textContent=(status.current||status.message||'Buscando vendedores…')+' · '+(status.pagesDone||0)+' páginas consultadas';if(Date.now()-startedAt>45*60*1000)throw new Error('A consulta ultrapassou 45 minutos. Reduza a quantidade de sorteios selecionados e tente novamente.');await new Promise(resolve=>setTimeout(resolve,1500));status=await api('/api/sellers/status?id='+encodeURIComponent(started.jobId));}
-      if(status.status!=='complete')throw new Error(status.message||'Não foi possível concluir a consulta.');const unique=new Map();for(const item of (status.sellers||[])){const key=String(item.id||item.ids?.[0]||item.name);if(key&&item.name&&!unique.has(key))unique.set(key,{...item,id:key});}sellers=[...unique.values()].sort((x,y)=>x.name.localeCompare(y.name,'pt-BR')||String(x.id).localeCompare(String(y.id)));
-      if(!sellers.length){list.innerHTML='<p class="muted">Nenhum vendedor encontrado.</p>';$('sellerInfo').textContent=status.message||'A API não retornou vendedores para este sorteio.';return;}
+    if(drawIds.length>20){$('sellerInfo').textContent='Selecione no máximo 20 sorteios por consulta.';return;}
+    setWorkflow('loading-sellers');const unique=new Map();const warnings=[];const batches=[];for(let i=0;i<drawIds.length;i+=3)batches.push(drawIds.slice(i,i+3));
+    try{
+      for(let batchIndex=0;batchIndex<batches.length;batchIndex++){
+        const batch=batches[batchIndex];$('sellerInfo').textContent='Etapa 2 de 3 · grupo '+(batchIndex+1)+'/'+batches.length+' · consultando '+batch.length+' sorteio(s)…';
+        const started=await api('/api/sellers?drawIds='+encodeURIComponent(batch.join(',')));let status=started;const startedAt=Date.now();
+        while(status.status==='running'){
+          $('sellerInfo').textContent='Grupo '+(batchIndex+1)+'/'+batches.length+' · '+(status.current||status.message||'Buscando vendedores…')+' · '+(status.pagesDone||0)+' páginas consultadas neste grupo';
+          if(Date.now()-startedAt>45*60*1000)throw new Error('O grupo '+(batchIndex+1)+' ultrapassou 45 minutos. Nenhuma extração de contatos foi iniciada. Tente novamente com menos sorteios.');
+          await new Promise(resolve=>setTimeout(resolve,1500));status=await api('/api/sellers/status?id='+encodeURIComponent(started.jobId));
+        }
+        if(status.status!=='complete')throw new Error('Falha no grupo '+(batchIndex+1)+': '+(status.message||'não foi possível concluir a consulta.'));
+        for(const item of (status.sellers||[])){const key=String(item.id||item.ids?.[0]||item.name);if(key&&item.name&&!unique.has(key))unique.set(key,{...item,id:key});}
+        if(status.errors?.length)warnings.push(...status.errors);
+      }
+      sellers=[...unique.values()].sort((x,y)=>x.name.localeCompare(y.name,'pt-BR')||String(x.id).localeCompare(String(y.id)));
+      if(!sellers.length){list.innerHTML='<p class="muted">Nenhum vendedor encontrado.</p>';$('sellerInfo').textContent='A consulta terminou, mas não retornou vendedores. Verifique os sorteios selecionados.';return;}
       for(const s of sellers){const label=document.createElement('label');label.className='seller-check';const input=document.createElement('input');input.type='checkbox';input.value=String(s.id);input.dataset.sellerId=String(s.id);input.dataset.sellerName=s.name;input.className='seller-option';const name=document.createElement('span');name.textContent=s.name;label.append(input,name);list.appendChild(label);}updateSelectionSummary();
-      $('sellerInfo').textContent=sellers.length+' vendedores/canais encontrados. Identidades distintas são mantidas mesmo quando os nomes coincidem. Marque os desejados e toque em “Iniciar extração”.'+(status.errors?.length?' Atenção: houve falhas parciais; atualize antes de extrair.':'');setWorkflow('extract');
+      $('sellerInfo').textContent=sellers.length+' vendedores/canais encontrados em '+drawIds.length+' sorteio(s). Identidades distintas são mantidas mesmo quando os nomes coincidem. Marque os desejados e toque em “Iniciar extração”.'+(warnings.length?' Atenção: a consulta informou '+warnings.length+' ocorrência(s) de falha parcial; confira a lista antes de extrair.':' Consulta concluída.');
+      setWorkflow('extract');
     }catch(e){$('sellerInfo').textContent='Não foi possível carregar a lista completa: '+e.message;}
     finally{if(workflowStage==='loading-sellers')setWorkflow('sellers');}
   }
@@ -73,7 +86,7 @@
   async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;sellers=[];$('sellerCheckboxes').replaceChildren();$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('previewBtn').disabled=true;$('previewBtn').hidden=true;$('previewPanel').classList.add('hidden');loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   async function extract(){
-    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');if(workflowStage==='sellers'&&drawIds.length>3){setProgress('Para carregar vendedores com mais rapidez, selecione até 3 sorteios por vez. Você pode repetir o processo para os demais.');return;}if(workflowStage==='draws')return setProgress('Selecione os sorteios desejados e toque em “Carregar vendedores”.');if(workflowStage==='sellers'){await loadSellers();return;}if(workflowStage!=='extract')return;
+    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');if(workflowStage==='draws')return setProgress('Selecione os sorteios desejados e toque em “Carregar vendedores”.');if(workflowStage==='sellers'){await loadSellers();return;}if(workflowStage!=='extract')return;
     contacts=[];canExport=false;setWorkflow('extracting');$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('previewBtn').disabled=true;$('previewBtn').hidden=true;$('previewPanel').classList.add('hidden');$('extractBtn').disabled=true;$('reloadBtn').disabled=true;
     $('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';
     setProgress('Extração solicitada manualmente. Iniciando leitura dos sorteios e vendedores selecionados…');
