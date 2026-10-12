@@ -64,7 +64,7 @@ function sendError(res,e){json(res,e.status||500,{success:false,message:e.messag
 
 async function runExtraction(s, b, job) {
   const ids=Array.isArray(b.drawIds)?b.drawIds.map(Number).filter(n=>Number.isFinite(n)&&n>0):[];
-  const sellerFilter=String(b.seller||'').trim().toLocaleLowerCase('pt-BR');
+  const sellerIds=new Set(Array.isArray(b.sellerIds)?b.sellerIds.map(String):[]);
   const byPhone=new Map(); let ticketsRead=0; const errors=[];
   const normalizePhone=v=>{let n=String(v||'').replace(/\\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.length===10||n.length===11){if(!n.startsWith('55'))n='55'+n;}if(n.length<12||n.length>13||!n.startsWith('55'))return '';return '+'+n;};
   for(const drawId of ids){
@@ -84,8 +84,9 @@ async function runExtraction(s, b, job) {
           for(const t of tickets){
             ticketsRead++;
             const buyer=t.buyer||t.customer||{};const seller=t.seller||t.vendor||{};
-            const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||t.sellerName||t.seller_name||'');
-            if(sellerFilter&&!String(sellerName).toLocaleLowerCase('pt-BR').includes(sellerFilter))continue;
+            const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||seller.nome||t.sellerName||t.seller_name||'');
+            const sellerId=String(typeof seller==='object'?(seller.id??seller.seller_id??seller.user_id??seller.uuid??sellerName):sellerName);
+            if(sellerIds.size&&!sellerIds.has(sellerId)&&!sellerIds.has(String(sellerName)))continue;
             const buyerName=typeof buyer==='string'?buyer:(buyer.name||buyer.fullName||buyer.full_name||buyer.nome||t.buyerName||t.buyer_name||t.name||'');
             const phone=typeof buyer==='object'?(buyer.phone||buyer.cellphone||buyer.mobile||buyer.telephone||buyer.phoneNumber||buyer.phone_number||buyer.whatsapp||t.buyerPhone||t.buyer_phone||t.telephone||t.phone||''):(t.buyerPhone||t.buyer_phone||t.telephone||t.phone||'');
             const normalized=normalizePhone(phone); if(!normalized)continue;
@@ -138,6 +139,19 @@ const app=http.createServer(async(req,res)=>{
       const d=extractData(result);
       const draws=Array.isArray(d)?d:(Array.isArray(d?.draws)?d.draws:[]);
       return json(res,200,{success:true,draws});
+    }catch(e){return sendError(res,e);}
+  }
+  if(req.method==='GET'&&u.pathname==='/api/sellers'){
+    try{
+      const ids=(u.searchParams.get('drawIds')||'').split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0);
+      if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio para carregar os vendedores.'});
+      if(ids.length>20)return json(res,400,{success:false,message:'Selecione no máximo 20 sorteios para listar vendedores.'});
+      const sellers=new Map();const endpointErrors=[];
+      const addItems=(payload)=>{const d=extractData(payload);const list=Array.isArray(d)?d:(Array.isArray(d?.sellers)?d.sellers:(Array.isArray(d?.vendors)?d.vendors:(Array.isArray(d?.items)?d.items:[])));for(const x of list){const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||x.seller_name||x.vendor_name||'');if(!String(name).trim())continue;const id=String(typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name);sellers.set(id,{id,name:String(name).trim()});}return list.length>0;};
+      for(const drawId of ids){let found=false;for(const route of ['/admin/draws/'+drawId+'/sellers','/admin/draws/'+drawId+'/vendors','/admin/draws/'+drawId+'/sales/sellers']){try{const result=await official(s,route);if(addItems(result)){found=true;break;}}catch(e){endpointErrors.push('Sorteio '+drawId+' '+route+': '+e.message);}}
+        if(!found){try{const dr=extractData(await official(s,'/admin/draws/'+drawId));const info=dr?.draw||dr;let lots=[];if(Array.isArray(info?.lots)&&info.lots.length)lots=info.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0);else{const count=Number(info?.lotsCount??info?.totalLots??info?.lot_count??info?.lots);lots=Array.from({length:Math.max(1,Math.min(100,count||5))},(_,i)=>i+1);}for(const lot of lots){try{const r=await official(s,'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page=1&limit=100');const d=extractData(r);const ts=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);for(const t of ts){const x=t.seller||t.vendor||{};const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||t.sellerName||t.seller_name||'');if(!String(name).trim())continue;const id=String(typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name);sellers.set(id,{id,name:String(name).trim()});}}catch(e){endpointErrors.push('Sorteio '+drawId+', lote '+lot+': '+e.message);}}}catch(e){endpointErrors.push('Sorteio '+drawId+': '+e.message);}}
+      }
+      return json(res,200,{success:true,sellers:[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')),note:sellers.size?'':'A API não retornou vendedores nos endpoints consultados. Tente atualizar; se continuar vazio, a API oficial pode exigir outro endpoint para o relatório de vendedores.',partialErrors:endpointErrors.slice(0,10)});
     }catch(e){return sendError(res,e);}
   }
   if(req.method==='POST'&&u.pathname==='/api/extract'){
