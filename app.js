@@ -36,10 +36,14 @@
     if(session)headers['X-Extrator-Session']=session;
     const retryable=(options.method||'GET')==='GET'||!!headers['X-Extrator-Request-Id'];
     let response,lastError;
-    const maxAttempts=retryable?7:1;
+    const maxAttempts=retryable?14:1;
     for(let attempt=0;attempt<maxAttempts;attempt++){
       try{response=await fetch(API_BASE+url,{...options,headers});break;}
-      catch(e){lastError=e;if(attempt<maxAttempts-1)await new Promise(resolve=>setTimeout(resolve,Math.min(1000*(attempt+1),5000)));}
+      catch(e){lastError=e;if(attempt<maxAttempts-1){
+        const delay=Math.min(1500*(attempt+1),8000);
+        if(attempt===0||attempt===3||attempt===7) setStatus('Reconectando ao servidor do Extrator… tentativa '+(attempt+2)+'/'+maxAttempts);
+        await new Promise(resolve=>setTimeout(resolve,delay));
+      }}
     }
     if(!response)throw new Error('Não foi possível alcançar o servidor do Extrator após tentativas de reconexão. Verifique a conexão e tente novamente. Detalhe: '+(lastError?.message||'falha de rede'));
     let data;try{data=await response.json();}catch{throw new Error('O servidor respondeu sem JSON válido (HTTP '+response.status+'). Tente novamente em instantes.');}
