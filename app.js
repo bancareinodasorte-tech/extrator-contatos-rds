@@ -1,12 +1,12 @@
 (() => {
   const API_BASE = 'https://extrator-contatos-rds-api.onrender.com';
   const $ = id => document.getElementById(id);
-  let session = sessionStorage.getItem('rds_extrator_session') || '';
+  let session = localStorage.getItem('rds_extrator_session') || sessionStorage.getItem('rds_extrator_session') || '';
   let contacts = [];
   let canExport = false;
   let sellers = [];
   let sellerDrawSignature = '';
-  const normalizeSellerName = name => String(name||'').replace(/\uFFFD/g,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').replace(/\s*[-–—|]\s*(vendas\s+online|online|vendas|on-line)\s*$/i,'').replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
+  const normalizeSellerName = name => String(name||'').replace(/\uFFFD/g,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
   function updateSelectionSummary(){const draws=[...$('draws').selectedOptions].length;const options=[...document.querySelectorAll('#sellerCheckboxes input.seller-option')];const selected=options.filter(o=>o.checked).length;const total=sellers.length||options.length;$('selectionSummary').textContent=draws+' sorteio(s) selecionado(s) · '+total+' vendedores ativos · '+selected+' selecionado(s) · Total '+selected+'/'+total;}
   const setStatus = (message, bad=false) => { $('status').textContent=message; $('status').style.color=bad?'#ff9b9b':''; };
   const setProgress = message => $('progress').textContent=message;
@@ -37,7 +37,7 @@
     else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
     $('sellerCheckboxes').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
     setProgress('Selecione um ou mais sorteios. Os vendedores participantes serão carregados automaticamente.');
-    if(select.options.length){select.options[0].selected=true;await loadSellers();}
+    if(select.options.length){select.selectedIndex=-1;updateSelectionSummary();}
   }
   async function loadSellers(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const list=$('sellerCheckboxes');list.replaceChildren();sellers=[];sellerDrawSignature=signature;updateSelectionSummary();
@@ -57,11 +57,11 @@
     if($('rememberPassword').checked){localStorage.setItem('rds_extrator_email',email);localStorage.setItem('rds_extrator_password',password);}else{localStorage.removeItem('rds_extrator_email');localStorage.removeItem('rds_extrator_password');}
     if(!email||!password)return setStatus('Informe o e-mail e a senha da conta oficial.',true);
     $('loginBtn').disabled=true;setStatus('Autenticando na API oficial da Reino da Sorte…');
-    try{const result=await api('/api/login',{method:'POST',body:JSON.stringify({email,password})});session=result.session;sessionStorage.setItem('rds_extrator_session',session);$('password').value='';loggedIn(true);await loadDraws();}
-    catch(e){session='';sessionStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);}
+    try{const result=await api('/api/login',{method:'POST',body:JSON.stringify({email,password})});session=result.session;localStorage.setItem('rds_extrator_session',session);$('password').value='';loggedIn(true);await loadDraws();}
+    catch(e){session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);}
     finally{$('loginBtn').disabled=false;}
   }
-  async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;sellers=[];$('sellerCheckboxes').replaceChildren();$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('previewBtn').disabled=true;$('previewBtn').hidden=true;$('previewPanel').classList.add('hidden');loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
+  async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;sellers=[];$('sellerCheckboxes').replaceChildren();$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('previewBtn').disabled=true;$('previewBtn').hidden=true;$('previewPanel').classList.add('hidden');loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   async function extract(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');
@@ -101,5 +101,5 @@
   $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
   if(localStorage.getItem('rds_extrator_email')){$('email').value=localStorage.getItem('rds_extrator_email');$('rememberPassword').checked=true;}
   if(localStorage.getItem('rds_extrator_password'))$('password').value=localStorage.getItem('rds_extrator_password');
-  if(session){loggedIn(true);loadDraws().catch(e=>{session='';sessionStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);});}else loggedIn(false);
+  if(session){loggedIn(true);loadDraws().catch(e=>{session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);});}else loggedIn(false);
 })();
