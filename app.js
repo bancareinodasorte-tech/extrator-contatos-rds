@@ -105,5 +105,27 @@
   $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
   if(localStorage.getItem('rds_extrator_email')){$('email').value=localStorage.getItem('rds_extrator_email');$('rememberPassword').checked=true;}
   if(localStorage.getItem('rds_extrator_password'))$('password').value=localStorage.getItem('rds_extrator_password');
-  if(session){loggedIn(true);loadDraws().catch(async e=>{if(e.message.includes('Sessão expirada')&&localStorage.getItem('rds_extrator_email')&&localStorage.getItem('rds_extrator_password')){try{const result=await fetch(API_BASE+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:localStorage.getItem('rds_extrator_email'),password:localStorage.getItem('rds_extrator_password')})});const data=await result.json();if(!result.ok||!data.session)throw new Error(data.message||'Não foi possível renovar a sessão.');session=data.session;localStorage.setItem('rds_extrator_session',session);loggedIn(true);await loadDraws();setStatus('Conexão restabelecida. Confira os sorteios antes de iniciar uma nova extração.');return;}catch(recoveryError){setStatus('A sessão foi perdida. Entre novamente para continuar: '+recoveryError.message,true);}}else setStatus(e.message,true);session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');loggedIn(false);});}else loggedIn(false);
+  if(session){loggedIn(true);loadDraws().then(()=>{if(activeExtractionJob)resumeExtraction(activeExtractionJob);}).catch(async e=>{if(e.message.includes('Sessão expirada')&&localStorage.getItem('rds_extrator_email')&&localStorage.getItem('rds_extrator_password')){try{const result=await fetch(API_BASE+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:localStorage.getItem('rds_extrator_email'),password:localStorage.getItem('rds_extrator_password')})});const data=await result.json();if(!result.ok||!data.session)throw new Error(data.message||'Não foi possível renovar a sessão.');session=data.session;localStorage.setItem('rds_extrator_session',session);loggedIn(true);await loadDraws();setStatus('Conexão restabelecida. Confira os sorteios antes de iniciar uma nova extração.');return;}catch(recoveryError){setStatus('A sessão foi perdida. Entre novamente para continuar: '+recoveryError.message,true);}}else setStatus(e.message,true);session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');loggedIn(false);});}else loggedIn(false);
+  async function resumeExtraction(jobId){
+    setWorkflow('extracting');setProgress('Reconectando à extração que já estava em andamento…');
+    try{
+      let result;
+      do{
+        await sleep(1800);
+        result=await api('/api/extract/status?id='+encodeURIComponent(jobId));
+        $('ticketsCount').textContent=Number(result.ticketsRead||0).toLocaleString('pt-BR');
+        $('errorsCount').textContent=(result.errors||[]).length.toLocaleString('pt-BR');
+        setProgress('Acompanhando a extração…\\n'+(result.current||'')+'\\nPáginas processadas: '+Number(result.pagesDone||0).toLocaleString('pt-BR'));
+      }while(result.status==='running');
+      activeExtractionJob='';localStorage.removeItem('rds_extrator_active_job');
+      if(result.status==='complete'&&!(result.errors||[]).length){
+        contacts=result.contacts||[];canExport=true;
+        $('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
+        $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;$('previewBtn').hidden=!contacts.length;
+        setProgress('Concluído: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos.');
+      }else setProgress(result.message||'A extração não pôde ser recuperada.');
+    }catch(e){setProgress('Não foi possível recuperar automaticamente: '+e.message+' Se o servidor reiniciou, o trabalho pode ter sido perdido.');}
+    finally{setWorkflow('extract');}
+  }
+
 })();
