@@ -1,19 +1,63 @@
-(()=>{"use strict";
-const API="https://api.reinodasorte.com.br", $=id=>document.getElementById(id);
-let accessToken="",refreshToken="",deviceId="web_"+Date.now(),drawList=[],contacts=[],ticketCount=0,errors=0;
-const status=(s)=>$("status").textContent=s, progress=(s)=>$("progress").textContent=s;
-const setState=s=>$("appState").textContent=s;
-async function request(path,opts={}){const headers={"Content-Type":"application/json","x-device-id":deviceId,...(opts.headers||{})};if(accessToken)headers.Authorization="Bearer "+accessToken;let r=await fetch(API+path,{...opts,headers});let j;try{j=await r.json()}catch{throw Error("Resposta inválida da API (HTTP "+r.status+").")}if(r.status===401&&refreshToken&&path!=="/auth/refresh"){const rr=await fetch(API+"/auth/refresh",{method:"POST",headers:{"Content-Type":"application/json","x-device-id":deviceId},body:JSON.stringify({refreshToken})});const jj=await rr.json().catch(()=>({}));if(rr.ok&&jj.data?.accessToken){accessToken=jj.data.accessToken;refreshToken=jj.data.refreshToken||refreshToken;headers.Authorization="Bearer "+accessToken;r=await fetch(API+path,{...opts,headers});j=await r.json().catch(()=>({}));}}if(!r.ok||j.success===false)throw Error(j.message||j.error||("Falha HTTP "+r.status+" em "+path));return j.data??j;}
-function nameOf(t){const b=t.buyer||{};return String(b.name||b.fullName||b.full_name||"").trim();}
-function phoneOf(t){const b=t.buyer||{};let p=String(b.phone||b.phoneNumber||b.phone_number||b.whatsapp||"").replace(/\D/g,"");if(p.length===10||p.length===11)p="55"+p;if(p.length<12||p.length>13)return "";return p;}
-function sellerOf(t){const s=t.seller||{};return String(typeof s==="string"?s:(s.name||s.fullName||s.full_name||"")).trim();}
-function drawTitle(d){return "#"+d.id+" — "+(d.title||d.description||"Sorteio")+" ("+(d.total_tickets??"?")+" bilhetes)";}
-async function loadDraws(){status("Consultando sorteios na API oficial…");const d=await request("/admin/draws");drawList=Array.isArray(d)?d:(d.draws||d.items||[]);const el=$("draws");el.innerHTML="";drawList.forEach(x=>{const o=document.createElement("option");o.value=x.id;o.textContent=drawTitle(x);el.appendChild(o)});el.disabled=false;$("seller").disabled=false;$("extractBtn").disabled=false;$("reloadBtn").disabled=false;status("Login confirmado. Sorteios encontrados: "+drawList.length+".");setState("Conectado");$("logoutBtn").hidden=false;}
-$("loginBtn").addEventListener("click",async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){status("Informe e-mail e senha.");return;}const btn=$("loginBtn");btn.disabled=true;try{const d=await request("/auth/login",{method:"POST",body:JSON.stringify({email,password,deviceId})});accessToken=d.accessToken;refreshToken=d.refreshToken||"";if(!accessToken)throw Error("A API não retornou accessToken.");$("password").value="";await loadDraws();}catch(e){status("Não foi possível conectar: "+e.message+" Se aparecer erro de rede/CORS, a API precisa autorizar o domínio ou será necessário um intermediário seguro.");setState("Falha de conexão");}finally{btn.disabled=false;}});
-$("reloadBtn").addEventListener("click",()=>loadDraws().catch(e=>status("Falha ao atualizar sorteios: "+e.message)));
-$("logoutBtn").addEventListener("click",()=>{accessToken="";refreshToken="";drawList=[];contacts=[];$("draws").innerHTML="";$("draws").disabled=true;$("seller").disabled=true;$("extractBtn").disabled=true;$("reloadBtn").disabled=true;$("logoutBtn").hidden=true;$("vcfBtn").disabled=true;$("csvBtn").disabled=true;setState("Desconectado");status("Sessão encerrada. Nenhum token ou senha foi salvo.");progress("Aguardando autenticação.");});
-$("extractBtn").addEventListener("click",async()=>{const ids=[...$("draws").selectedOptions].map(o=>o.value);if(!ids.length){progress("Selecione ao menos um sorteio.");return;}const btn=$("extractBtn");btn.disabled=true;$("vcfBtn").disabled=true;$("csvBtn").disabled=true;contacts=[];ticketCount=0;errors=0;const byPhone=new Map(),nameCounts=new Map(),sellerFilter=$("seller").value.trim().toLocaleLowerCase("pt-BR");try{for(const id of ids){const d=drawList.find(x=>String(x.id)===id);let lots=Number(d?.lots||1);lots=Math.max(1,Math.min(lots,100));for(let lot=1;lot<=lots;lot++){let page=1,totalPages=1;do{progress("Sorteio "+id+" · lote "+lot+" · página "+page+" de "+totalPages+" · contatos únicos "+byPhone.size);const result=await request("/admin/draws/"+encodeURIComponent(id)+"/lots/"+lot+"/tickets?page="+page+"&limit=100");const tickets=result.tickets||result.data?.tickets||[];const pg=result.pagination||result.data?.pagination||{};totalPages=Number(pg.totalPages||1);ticketCount+=tickets.length;for(const t of tickets){const sn=sellerOf(t).toLocaleLowerCase("pt-BR");if(sellerFilter&&!sn.includes(sellerFilter))continue;const phone=phoneOf(t),rawName=nameOf(t);if(!phone||!rawName)continue;if(byPhone.has(phone))continue;let base=rawName.toLocaleUpperCase("pt-BR").replace(/^CLIENTE\s*/,"").trim();if(!base)continue;const n=(nameCounts.get(base)||0)+1;nameCounts.set(base,n);const full="CLIENTE "+base+(n>1?" "+n:"");byPhone.set(phone,{name:full,phone});}if(!tickets.length&&page<totalPages){errors++;break;}page++;}while(page<=totalPages);}}catch(e){errors++;progress("Extração interrompida: "+e.message);}contacts=[...byPhone.values()];$("ticketsCount").textContent=ticketCount.toLocaleString("pt-BR");$("contactsCount").textContent=contacts.length.toLocaleString("pt-BR");$("errorsCount").textContent=errors;progress(errors?"Extração incompleta. Exportação bloqueada para evitar arquivo parcial. Confira conexão e tente novamente.":"Concluído. "+ticketCount.toLocaleString("pt-BR")+" bilhetes lidos; "+contacts.length.toLocaleString("pt-BR")+" contatos únicos.");$("vcfBtn").disabled=errors>0||!contacts.length;$("csvBtn").disabled=errors>0||!contacts.length;btn.disabled=false;});
-function download(filename,type,data){const a=document.createElement("a"),url=URL.createObjectURL(new Blob([data],{type}));a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-$("vcfBtn").addEventListener("click",()=>{if(errors||!contacts.length)return;const v=contacts.map(c=>"BEGIN:VCARD\r\nVERSION:3.0\r\nFN:"+c.name.replace(/[\\,;]/g,"\\$&")+"\r\nTEL;TYPE=CELL,VOICE:+ "+c.phone+"\r\nEND:VCARD").join("\r\n");download("contatos-rds.vcf","text/vcard;charset=utf-8",v);});
-$("csvBtn").addEventListener("click",()=>{if(errors||!contacts.length)return;const q=s=>'"'+String(s).replace(/"/g,'""')+'"';download("contatos-rds.csv","text/csv;charset=utf-8","Nome,Telefone\r\n"+contacts.map(c=>q(c.name)+","+q(c.phone)).join("\r\n"));});
+(() => {
+  const $ = id => document.getElementById(id);
+  let session = sessionStorage.getItem('rds_extrator_session') || '';
+  let contacts = [];
+  let canExport = false;
+  const setStatus = (message, bad=false) => { $('status').textContent=message; $('status').style.color=bad?'#ff9b9b':''; };
+  const setProgress = message => $('progress').textContent=message;
+  const appState = text => $('appState').textContent=text;
+  async function api(url, options={}) {
+    const headers={'Content-Type':'application/json',...(options.headers||{})};
+    if(session)headers['X-Extrator-Session']=session;
+    const response=await fetch(url,{...options,headers});
+    let data;try{data=await response.json();}catch{throw new Error('Resposta inválida do servidor.');}
+    if(!response.ok||data.success===false)throw new Error(data.message||('Falha HTTP '+response.status));
+    return data;
+  }
+  function loggedIn(on) {
+    $('draws').disabled=!on;$('seller').disabled=!on;$('reloadBtn').disabled=!on;$('extractBtn').disabled=!on;
+    $('logoutBtn').hidden=!on;$('loginBtn').disabled=on;$('email').disabled=on;$('password').disabled=on;
+    appState(on?'Conectado':'Aguardando login');
+  }
+  async function loadDraws() {
+    setStatus('Buscando os sorteios disponíveis na conta oficial…');
+    const result=await api('/api/draws');const draws=result.draws||[];const select=$('draws');select.replaceChildren();
+    for(const d of draws){
+      const id=d.id??d.draw_id??d.drawId;if(id===undefined||id===null)continue;
+      const option=document.createElement('option');option.value=String(id);
+      option.textContent='#'+id+' — '+(d.title||d.name||d.description||('Sorteio '+id))+(d.draw_date?' · '+new Date(d.draw_date).toLocaleDateString('pt-BR'):'')+(d.draw_status?' · '+d.draw_status:'');
+      select.appendChild(option);
+    }
+    if(!select.options.length){const o=document.createElement('option');o.textContent='Nenhum sorteio retornado pela API';select.appendChild(o);setStatus('A API autenticou, mas não retornou sorteios para esta conta.',true);}
+    else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
+    setProgress('Selecione um ou mais sorteios. Opcionalmente, filtre pelo nome do vendedor.');
+  }
+  async function login() {
+    const email=$('email').value.trim(),password=$('password').value;
+    if(!email||!password)return setStatus('Informe o e-mail e a senha da conta oficial.',true);
+    $('loginBtn').disabled=true;setStatus('Autenticando na API oficial da Reino da Sorte…');
+    try{const result=await api('/api/login',{method:'POST',body:JSON.stringify({email,password})});session=result.session;sessionStorage.setItem('rds_extrator_session',session);$('password').value='';loggedIn(true);await loadDraws();}
+    catch(e){session='';sessionStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);}
+    finally{$('loginBtn').disabled=false;}
+  }
+  async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
+  async function extract(){
+    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');
+    contacts=[];canExport=false;$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('extractBtn').disabled=true;$('reloadBtn').disabled=true;
+    $('ticketsCount').textContent='…';$('contactsCount').textContent='…';$('errorsCount').textContent='…';setProgress('Extração em andamento. O servidor está percorrendo lotes e páginas; não feche esta página.');
+    try{const r=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,seller:$('seller').value.trim()})});
+      $('ticketsCount').textContent=Number(r.ticketsRead||0).toLocaleString('pt-BR');$('errorsCount').textContent=(r.errors||[]).length.toLocaleString('pt-BR');
+      if(!r.success||(r.errors||[]).length){setProgress((r.message||'A extração teve falhas.')+'\n'+(r.errors||[]).slice(0,8).join('\n'));return;}
+      contacts=r.contacts||[];canExport=true;$('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');$('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;
+      setProgress('Concluído sem falhas: '+Number(r.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes lidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido.');
+    }catch(e){$('ticketsCount').textContent='—';$('contactsCount').textContent='—';$('errorsCount').textContent='1';setProgress('Falha: '+e.message+'\nExportação bloqueada para evitar arquivo incompleto.');}
+    finally{$('extractBtn').disabled=false;$('reloadBtn').disabled=false;}
+  }
+  function download(name,type,content){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  function vcfEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');}
+  $('loginBtn').addEventListener('click',login);$('password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('email').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('logoutBtn').addEventListener('click',logout);
+  $('reloadBtn').addEventListener('click',()=>loadDraws().catch(e=>setStatus(e.message,true)));$('extractBtn').addEventListener('click',extract);
+  $('vcfBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const data=contacts.map(c=>'BEGIN:VCARD\r\nVERSION:3.0\r\nN:'+vcfEscape(c.name)+';;;;\r\nFN:'+vcfEscape(c.name)+'\r\nTEL;TYPE=CELL:'+c.phone+'\r\nEND:VCARD').join('\r\n')+'\r\n';download('contatos-reino-da-sorte.vcf','text/vcard;charset=utf-8',data);});
+  $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
+  if(session){loggedIn(true);loadDraws().catch(e=>{session='';sessionStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);});}else loggedIn(false);
 })();
