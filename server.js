@@ -80,6 +80,11 @@ const app=http.createServer(async(req,res)=>{
   if(req.method==='POST'&&u.pathname==='/api/logout'){
     const id=(req.headers['x-extrator-session']||'').toString();sessions.delete(id);return json(res,200,{success:true});
   }
+  if(req.method==='GET'&&!u.pathname.startsWith('/api/')) {
+    const filePath=path.join(__dirname,u.pathname==='/'?'index.html':decodeURIComponent(u.pathname).replace(/^\\/+/,'')); 
+    if(!filePath.startsWith(__dirname))return json(res,403,{success:false,message:'Acesso negado.'});
+    return fs.readFile(filePath,(err,content)=>{if(err){res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8'});return res.end('Não encontrado');}res.writeHead(200,{'Content-Type':mime[path.extname(filePath)]||'application/octet-stream','Cache-Control':'no-cache'});res.end(content);});
+  }
   const s=getSession(req);
   if(!s)return json(res,401,{success:false,message:'Sessão expirada. Entre novamente com sua conta oficial.'});
   if(req.method==='GET'&&u.pathname==='/api/draws'){
@@ -149,8 +154,6 @@ const app=http.createServer(async(req,res)=>{
       return json(res,200,{success:true,ticketsRead,contactsCount:contacts.length,contacts,errors:[]});
     }catch(e){return sendError(res,e);}
   }
-  const filePath=path.join(__dirname,u.pathname==='/'?'index.html':decodeURIComponent(u.pathname).replace(/^\/+/,'')); 
-  if(!filePath.startsWith(__dirname))return json(res,403,{success:false,message:'Acesso negado.'});
-  fs.readFile(filePath,(err,content)=>{if(err){res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8'});return res.end('Não encontrado');}res.writeHead(200,{'Content-Type':mime[path.extname(filePath)]||'application/octet-stream','Cache-Control':'no-cache'});res.end(content);});
+  return json(res,404,{success:false,message:'Rota não encontrada.'});
 });
 app.listen(PORT,'0.0.0.0',()=>console.log('Extrator Contatos RDS listening on '+PORT));
