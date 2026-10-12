@@ -45,7 +45,8 @@ function requestOfficial(url, method='GET', data=null, token=null, deviceId=null
 function getSession(req) {
   const id=(req.headers['x-extrator-session']||'').toString();
   const s=sessions.get(id);
-  if(!s||Date.now()-s.createdAt>sessionTtl){if(id)sessions.delete(id);return null;}
+  if(!s||Date.now()-(s.lastSeenAt||s.createdAt)>sessionTtl){if(id)sessions.delete(id);return null;}
+  s.lastSeenAt=Date.now();
   return s;
 }
 async function official(s, url, method='GET', data=null) {
@@ -146,7 +147,7 @@ const app=http.createServer(async(req,res)=>{
       const d=extractData(result);
       if(!d||!d.accessToken)return json(res,502,{success:false,message:'Login respondeu sem token. Verifique a resposta da API oficial.'});
       const id=crypto.randomBytes(32).toString('hex');
-      sessions.set(id,{accessToken:d.accessToken,refreshToken:d.refreshToken||null,deviceId,createdAt:Date.now()});
+      sessions.set(id,{accessToken:d.accessToken,refreshToken:d.refreshToken||null,deviceId,createdAt:Date.now(),lastSeenAt:Date.now()});
       return json(res,200,{success:true,session:id,user:d.user||d.admin||null});
     }catch(e){return sendError(res,e);}
   }
