@@ -65,9 +65,20 @@ function sendError(res,e){json(res,e.status||500,{success:false,message:e.messag
 
 async function runExtraction(s, b, job) {
   const ids=Array.isArray(b.drawIds)?b.drawIds.map(Number).filter(n=>Number.isFinite(n)&&n>0):[];
-  const sellerIds=new Set(Array.isArray(b.sellerIds)?b.sellerIds.map(String):[]);
+  const sellerIds=new Set(Array.isArray(b.sellerIds)?b.sellerIds.map(String):[]);const sellerNames=new Set(Array.isArray(b.sellerNames)?b.sellerNames.map(v=>String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR')):[]);
   const byPhone=new Map();let ticketsRead=0,pagesDone=0;const errors=[];
-  const normalizePhone=v=>{let n=String(v||'').replace(/\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.length===10||n.length===11){if(!n.startsWith('55'))n='55'+n;}if(n.length<12||n.length>13||!n.startsWith('55'))return '';return '+'+n;};
+  const normalizePhone=v=>{
+    let n=String(v||'').replace(/\D/g,'');
+    if(n.startsWith('00'))n=n.slice(2);
+    if(n.startsWith('55')&&(n.length===12||n.length===13))n=n.slice(2);
+    if(n.length===12&&n.startsWith('0'))n=n.slice(1);
+    if(n.length!==10&&n.length!==11)return '';
+    const ddd=Number(n.slice(0,2));if(ddd<11||ddd>99)return '';
+    const subscriber=n.slice(2);
+    if(n.length===11){if(subscriber[0]!=='9')return '';}
+    else if(!/^[2-5]/.test(subscriber))return '';
+    return n;
+  };
   const consume=t=>{
     const buyer=t.buyer??t.customer??null;
     const status=String(t.status??t.ticket_status??t.sale_status??'').toLowerCase();
@@ -77,7 +88,7 @@ async function runExtraction(s, b, job) {
     const seller=t.seller??t.vendor??{};
     const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||seller.nome||t.sellerName||t.seller_name||'');
     const sellerId=String(typeof seller==='object'?(seller.id??seller.seller_id??seller.user_id??seller.uuid??sellerName):sellerName);
-    if(sellerIds.size&&!sellerIds.has(sellerId)&&!sellerIds.has(String(sellerName)))return;
+    const sellerKey=String(sellerName).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');if((sellerIds.size||sellerNames.size)&&!sellerIds.has(sellerId)&&!sellerIds.has(String(sellerName))&&!sellerNames.has(sellerKey))return;
     ticketsRead++;
     const buyerName=typeof buyer==='string'?buyer:(buyer?.name||buyer?.fullName||buyer?.full_name||buyer?.nome||t.buyerName||t.buyer_name||'');
     const phone=typeof buyer==='object'?(buyer?.phone||buyer?.cellphone||buyer?.mobile||buyer?.telephone||buyer?.phoneNumber||buyer?.phone_number||buyer?.whatsapp||t.buyerPhone||t.buyer_phone||t.telephone||t.phone||''):(t.buyerPhone||t.buyer_phone||t.telephone||t.phone||'');
@@ -169,7 +180,9 @@ const app=http.createServer(async(req,res)=>{
       sellerJobs.set(jobId,{job,sessionId:String(req.headers['x-extrator-session']||'')});
       (async()=>{
         const sellers=new Map();const errors=[];
-        const addItems=(payload)=>{const d=extractData(payload);const list=Array.isArray(d)?d:(Array.isArray(d?.sellers)?d.sellers:(Array.isArray(d?.vendors)?d.vendors:(Array.isArray(d?.items)?d.items:[])));for(const x of list){const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||x.seller_name||x.vendor_name||'');if(!String(name).trim())continue;const id=String(typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name);sellers.set(id,{id,name:String(name).trim()});}return list.length>0;};
+        const sellerKey=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
+        const addSeller=(id,name)=>{name=String(name||'').trim();if(!name)return;const key=sellerKey(name);const old=sellers.get(key)||{id:key,name,ids:[]};const alias=String(id||name);if(!old.ids.includes(alias))old.ids.push(alias);if(name.length>old.name.length)old.name=name;sellers.set(key,old);};
+        const addItems=(payload)=>{const d=extractData(payload);const list=Array.isArray(d)?d:(Array.isArray(d?.sellers)?d.sellers:(Array.isArray(d?.vendors)?d.vendors:(Array.isArray(d?.items)?d.items:[])));for(const x of list){const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||x.seller_name||x.vendor_name||'');const id=typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name;addSeller(id,name);}return list.length>0;};
         const getSessionForJob=()=>{const rec=sellerJobs.get(jobId);if(!rec)throw new Error('Consulta expirada');const ses=sessions.get(rec.sessionId);if(!ses||Date.now()-ses.createdAt>sessionTtl)throw new Error('Sessão expirada');return ses;};
         try{
           for(const drawId of ids){
@@ -177,7 +190,7 @@ const app=http.createServer(async(req,res)=>{
             for(const route of ['/admin/draws/'+drawId+'/sellers','/admin/draws/'+drawId+'/vendors','/admin/draws/'+drawId+'/sales/sellers']){try{addItems(await official(session,route));}catch(e){if(e.status!==404&&e.status!==405)errors.push('Sorteio '+drawId+': '+e.message);}}
             let drawInfo=null;try{const dr=extractData(await official(session,'/admin/draws/'+drawId));drawInfo=dr?.draw||dr;}catch(e){errors.push('Sorteio '+drawId+': '+e.message);continue;}
             const lots=Array.isArray(drawInfo?.lots)&&drawInfo.lots.length?drawInfo.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0):[1,2,3,4,5];
-            for(const lot of lots){let page=1,totalPages=1;do{job.current='Sorteio '+drawId+' · lote '+lot+' · página '+page+'/'+totalPages;try{const result=await official(getSessionForJob(),'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit=100');const d=extractData(result);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);const p=d?.pagination||result?.pagination||{};totalPages=Math.max(1,Number(p.totalPages||p.total_pages||p.pages)||totalPages);for(const t of tickets){const x=t.seller||t.vendor||{};const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||t.sellerName||t.seller_name||'');if(!String(name).trim())continue;const id=String(typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name);sellers.set(id,{id,name:String(name).trim()});}job.pagesDone++;job.sellers=[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));if(!tickets.length)break;}catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página '+page+': '+e.message);break;}page++;}while(page<=totalPages);}
+            for(const lot of lots){let page=1,totalPages=1;do{job.current='Sorteio '+drawId+' · lote '+lot+' · página '+page+'/'+totalPages;try{const result=await official(getSessionForJob(),'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit=100');const d=extractData(result);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);const p=d?.pagination||result?.pagination||{};totalPages=Math.max(1,Number(p.totalPages||p.total_pages||p.pages)||totalPages);for(const t of tickets){const x=t.seller||t.vendor||{};const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||t.sellerName||t.seller_name||'');if(!String(name).trim())continue;const id=typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name;addSeller(id,name);}job.pagesDone++;job.sellers=[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));if(!tickets.length)break;}catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página '+page+': '+e.message);break;}page++;}while(page<=totalPages);}
           }
           job.sellers=[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
           if(errors.length&&!job.sellers.length){job.status='failed';job.message='Não foi possível concluir a consulta de vendedores.';job.errors=errors.slice(0,20);}else{job.status='complete';job.message=errors.length?'Lista encontrada, mas houve falhas parciais. Atualize para tentar novamente.':'Lista completa de vendedores carregada.';job.errors=errors.slice(0,20);}
