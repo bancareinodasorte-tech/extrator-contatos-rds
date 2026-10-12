@@ -110,18 +110,18 @@ async function runExtraction(s, b, job) {
     else{const count=Number(drawInfo?.lotsCount??drawInfo?.totalLots??drawInfo?.lot_count??drawInfo?.lots);lots=Array.from({length:Math.max(1,Math.min(100,count||5))},(_,i)=>i+1);}
     const tasks=[];
     for(const lot of lots){
-      job.current='Sorteio '+drawId+' · lote '+lot+' · preparando leitura…';
+      job.current='Sorteio '+drawId+' · lote '+(lots.indexOf(lot)+1)+'/'+lots.length+' · preparando leitura…';
       try{
         const first=await fetchPage(drawId,lot,1,500);const d=extractData(first);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);const p=d?.pagination||first?.pagination||{};
         const totalPages=Math.max(1,Number(p.totalPages||p.total_pages||p.pages)||1);
         for(const t of tickets)consume(t);
         pagesDone++;job.ticketsRead=ticketsRead;job.pagesDone=pagesDone;
-        for(let page=2;page<=totalPages;page++)tasks.push({drawId,lot,page,totalPages});
+        for(let page=2;page<=totalPages;page++)tasks.push({drawId,lot,page,totalPages,totalLots:lots.length,lotPosition:lots.indexOf(lot)+1});
       }catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página 1: '+e.message);}
     }
     let cursor=0;const workers=Array.from({length:Math.min(10,tasks.length)},async()=>{
       while(cursor<tasks.length){
-        const task=tasks[cursor++];job.current='Sorteio '+task.drawId+' · lote '+task.lot+' · página '+task.page+'/'+task.totalPages+' (leitura paralela)';
+        const task=tasks[cursor++];job.current='Sorteio '+task.drawId+' · lote '+task.lotPosition+'/'+task.totalLots+' · página '+task.page+'/'+task.totalPages+' (leitura paralela)';
         try{const result=await fetchPage(task.drawId,task.lot,task.page,500);const d=extractData(result);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);for(const t of tickets)consume(t);pagesDone++;job.pagesDone=pagesDone;job.ticketsRead=ticketsRead;}
         catch(e){errors.push('Sorteio '+task.drawId+', lote '+task.lot+', página '+task.page+': '+e.message);}
       }
@@ -191,7 +191,7 @@ const app=http.createServer(async(req,res)=>{
             if(sellerRouteWorked)continue;
             let drawInfo=null;try{const dr=extractData(await official(session,'/admin/draws/'+drawId));drawInfo=dr?.draw||dr;}catch(e){errors.push('Sorteio '+drawId+': '+e.message);continue;}
             const lots=Array.isArray(drawInfo?.lots)&&drawInfo.lots.length?drawInfo.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0):[1,2,3,4,5];
-            for(const lot of lots){let page=1,totalPages=1;do{job.current='Sorteio '+drawId+' · lote '+lot+' · página '+page+'/'+totalPages;try{const result=await official(getSessionForJob(),'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit=500&status=sold');const d=extractData(result);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);const p=d?.pagination||result?.pagination||{};totalPages=Math.max(1,Number(p.totalPages||p.total_pages||p.pages)||totalPages);for(const t of tickets){const x=t.seller||t.vendor||{};const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||t.sellerName||t.seller_name||'');if(!String(name).trim())continue;const id=typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name;addSeller(id,name);}job.pagesDone++;job.sellers=[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));if(!tickets.length)break;}catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página '+page+': '+e.message);break;}page++;}while(page<=totalPages);}
+            for(const lot of lots){let page=1,totalPages=1;do{job.current='Sorteio '+drawId+' · lote '+(lots.indexOf(lot)+1)+'/'+lots.length+' · página '+page+'/'+totalPages;try{const result=await official(getSessionForJob(),'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit=500&status=sold');const d=extractData(result);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);const p=d?.pagination||result?.pagination||{};totalPages=Math.max(1,Number(p.totalPages||p.total_pages||p.pages)||totalPages);for(const t of tickets){const x=t.seller||t.vendor||{};const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||t.sellerName||t.seller_name||'');if(!String(name).trim())continue;const id=typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name;addSeller(id,name);}job.pagesDone++;job.sellers=[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));if(!tickets.length)break;}catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página '+page+': '+e.message);break;}page++;}while(page<=totalPages);}
           }
           job.sellers=[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
           if(errors.length&&!job.sellers.length){job.status='failed';job.message='Não foi possível concluir a consulta de vendedores.';job.errors=errors.slice(0,20);}else{job.status='complete';job.message=errors.length?'Lista encontrada, mas houve falhas parciais. Atualize para tentar novamente.':'Lista completa de vendedores carregada.';job.errors=errors.slice(0,20);}
