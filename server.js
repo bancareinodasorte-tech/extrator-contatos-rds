@@ -8,6 +8,7 @@ const PORT = process.env.PORT || 10000;
 const API = 'https://api.reinodasorte.com.br';
 const sessions = new Map();
 const extractionJobs = new Map();
+const sellerJobs = new Map();
 const sessionTtl = 12 * 60 * 60 * 1000;
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 
@@ -146,13 +147,31 @@ const app=http.createServer(async(req,res)=>{
       const ids=(u.searchParams.get('drawIds')||'').split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0);
       if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio para carregar os vendedores.'});
       if(ids.length>20)return json(res,400,{success:false,message:'Selecione no máximo 20 sorteios para listar vendedores.'});
-      const sellers=new Map();const endpointErrors=[];
-      const addItems=(payload)=>{const d=extractData(payload);const list=Array.isArray(d)?d:(Array.isArray(d?.sellers)?d.sellers:(Array.isArray(d?.vendors)?d.vendors:(Array.isArray(d?.items)?d.items:[])));for(const x of list){const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||x.seller_name||x.vendor_name||'');if(!String(name).trim())continue;const id=String(typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name);sellers.set(id,{id,name:String(name).trim()});}return list.length>0;};
-      for(const drawId of ids){let found=false;for(const route of ['/admin/draws/'+drawId+'/sellers','/admin/draws/'+drawId+'/vendors','/admin/draws/'+drawId+'/sales/sellers']){try{const result=await official(s,route);if(addItems(result)){found=true;break;}}catch(e){endpointErrors.push('Sorteio '+drawId+' '+route+': '+e.message);}}
-        if(!found){try{const dr=extractData(await official(s,'/admin/draws/'+drawId));const info=dr?.draw||dr;let lots=[];if(Array.isArray(info?.lots)&&info.lots.length)lots=info.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0);else{const count=Number(info?.lotsCount??info?.totalLots??info?.lot_count??info?.lots);lots=Array.from({length:Math.max(1,Math.min(100,count||5))},(_,i)=>i+1);}for(const lot of lots){try{const r=await official(s,'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page=1&limit=100');const d=extractData(r);const ts=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);for(const t of ts){const x=t.seller||t.vendor||{};const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||t.sellerName||t.seller_name||'');if(!String(name).trim())continue;const id=String(typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name);sellers.set(id,{id,name:String(name).trim()});}}catch(e){endpointErrors.push('Sorteio '+drawId+', lote '+lot+': '+e.message);}}}catch(e){endpointErrors.push('Sorteio '+drawId+': '+e.message);}}
-      }
-      return json(res,200,{success:true,sellers:[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')),note:sellers.size?'':'A API não retornou vendedores nos endpoints consultados. Tente atualizar; se continuar vazio, a API oficial pode exigir outro endpoint para o relatório de vendedores.',partialErrors:endpointErrors.slice(0,10)});
+      const jobId=crypto.randomBytes(16).toString('hex');
+      const job={id:jobId,status:'running',message:'Consultando todos os lotes e páginas para localizar os vendedores participantes…',sellers:[],current:'Preparando consulta…',pagesDone:0,errors:[]};
+      sellerJobs.set(jobId,{job,sessionId:String(req.headers['x-extrator-session']||'')});
+      (async()=>{
+        const sellers=new Map();const errors=[];
+        const addItems=(payload)=>{const d=extractData(payload);const list=Array.isArray(d)?d:(Array.isArray(d?.sellers)?d.sellers:(Array.isArray(d?.vendors)?d.vendors:(Array.isArray(d?.items)?d.items:[])));for(const x of list){const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||x.seller_name||x.vendor_name||'');if(!String(name).trim())continue;const id=String(typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name);sellers.set(id,{id,name:String(name).trim()});}return list.length>0;};
+        const getSessionForJob=()=>{const rec=sellerJobs.get(jobId);if(!rec)throw new Error('Consulta expirada');const ses=sessions.get(rec.sessionId);if(!ses||Date.now()-ses.createdAt>sessionTtl)throw new Error('Sessão expirada');return ses;};
+        try{
+          for(const drawId of ids){
+            const session=getSessionForJob();job.current='Sorteio '+drawId+': consultando cadastro de vendedores…';
+            for(const route of ['/admin/draws/'+drawId+'/sellers','/admin/draws/'+drawId+'/vendors','/admin/draws/'+drawId+'/sales/sellers']){try{addItems(await official(session,route));}catch(e){if(e.status!==404&&e.status!==405)errors.push('Sorteio '+drawId+': '+e.message);}}
+            let drawInfo=null;try{const dr=extractData(await official(session,'/admin/draws/'+drawId));drawInfo=dr?.draw||dr;}catch(e){errors.push('Sorteio '+drawId+': '+e.message);continue;}
+            const lots=Array.isArray(drawInfo?.lots)&&drawInfo.lots.length?drawInfo.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0):[1,2,3,4,5];
+            for(const lot of lots){let page=1,totalPages=1;do{job.current='Sorteio '+drawId+' · lote '+lot+' · página '+page+'/'+totalPages;try{const result=await official(getSessionForJob(),'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit=100');const d=extractData(result);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);const p=d?.pagination||result?.pagination||{};totalPages=Math.max(1,Number(p.totalPages||p.total_pages||p.pages)||totalPages);for(const t of tickets){const x=t.seller||t.vendor||{};const name=typeof x==='string'?x:(x.name||x.fullName||x.full_name||x.nome||t.sellerName||t.seller_name||'');if(!String(name).trim())continue;const id=String(typeof x==='object'?(x.id??x.seller_id??x.user_id??x.uuid??name):name);sellers.set(id,{id,name:String(name).trim()});}job.pagesDone++;job.sellers=[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));if(!tickets.length)break;}catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página '+page+': '+e.message);break;}page++;}while(page<=totalPages);}
+          }
+          job.sellers=[...sellers.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+          if(errors.length&&!job.sellers.length){job.status='failed';job.message='Não foi possível concluir a consulta de vendedores.';job.errors=errors.slice(0,20);}else{job.status='complete';job.message=errors.length?'Lista encontrada, mas houve falhas parciais. Atualize para tentar novamente.':'Lista completa de vendedores carregada.';job.errors=errors.slice(0,20);}
+        }catch(e){job.status='failed';job.message=e.message||'Falha ao consultar vendedores.';job.errors=[job.message];}
+      })();
+      return json(res,202,{success:true,jobId,status:'running'});
     }catch(e){return sendError(res,e);}
+  }
+  if(req.method==='GET'&&u.pathname==='/api/sellers/status'){
+    const id=u.searchParams.get('id')||'';const rec=sellerJobs.get(id);if(!rec||rec.sessionId!==String(req.headers['x-extrator-session']||''))return json(res,404,{success:false,message:'Consulta de vendedores não encontrada ou sessão diferente.'});
+    return json(res,200,{success:true,status:rec.job.status,message:rec.job.message,current:rec.job.current,pagesDone:rec.job.pagesDone,sellers:rec.job.sellers||[],errors:rec.job.errors||[]});
   }
   if(req.method==='POST'&&u.pathname==='/api/extract'){
     try{
