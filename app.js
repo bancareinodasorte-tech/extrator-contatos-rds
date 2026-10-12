@@ -18,7 +18,7 @@
     return data;
   }
   function loggedIn(on) {
-    $('draws').disabled=!on;$('seller').disabled=!on;$('reloadBtn').disabled=!on;$('extractBtn').disabled=!on;$('selectAllDraws').disabled=!on;$('clearDraws').disabled=!on;
+    $('draws').disabled=!on;$('reloadBtn').disabled=!on;$('extractBtn').disabled=!on;$('selectAllDraws').disabled=!on;$('clearDraws').disabled=!on;
     $('logoutBtn').hidden=!on;$('loginBtn').disabled=on;$('email').disabled=on;$('password').disabled=on;
     appState(on?'Conectado':'Aguardando login');
   }
@@ -33,22 +33,22 @@
     }
     if(!select.options.length){const o=document.createElement('option');o.textContent='Nenhum sorteio finalizado disponível';select.appendChild(o);setStatus('A API não retornou sorteios finalizados para esta conta.',true);}
     else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
-    $('seller').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
+    $('sellerCheckboxes').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
     setProgress('Selecione um ou mais sorteios. Os vendedores participantes serão carregados automaticamente.');
     if(select.options.length){select.options[0].selected=true;await loadSellers();}
   }
   async function loadSellers(){
-    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const select=$('seller');select.replaceChildren();sellers=[];sellerDrawSignature=signature;
-    if(!drawIds.length){select.disabled=true;$('sellerInfo').textContent='Selecione ao menos um sorteio finalizado.';return;}
-    select.disabled=true;$('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Consultando todos os lotes e páginas para encontrar os vendedores…';
+    const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const list=$('sellerCheckboxes');list.replaceChildren();sellers=[];sellerDrawSignature=signature;
+    if(!drawIds.length){list.innerHTML='<p class="muted">Selecione ao menos um sorteio finalizado.</p>';$('sellerInfo').textContent='Selecione ao menos um sorteio finalizado.';return;}
+    $('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Consultando todos os lotes e páginas para encontrar os vendedores…';
     try{const started=await api('/api/sellers?drawIds='+encodeURIComponent(signature));let status=started;const startedAt=Date.now();
       while(status.status==='running'){$('sellerInfo').textContent=(status.current||status.message||'Buscando vendedores…')+' · '+(status.pagesDone||0)+' páginas consultadas';if(Date.now()-startedAt>12*60*1000)throw new Error('A consulta demorou mais que o esperado. Use “Atualizar vendedores” para tentar novamente.');await new Promise(resolve=>setTimeout(resolve,1500));status=await api('/api/sellers/status?id='+encodeURIComponent(started.jobId));}
       if(status.status!=='complete')throw new Error(status.message||'Não foi possível concluir a consulta.');sellers=status.sellers||[];
-      if(!sellers.length){const o=document.createElement('option');o.textContent='Nenhum vendedor encontrado';select.appendChild(o);$('sellerInfo').textContent=status.message||'A API não retornou vendedores para este sorteio.';return;}
-      for(const s of sellers){const o=document.createElement('option');o.value=s.id;o.textContent=s.name;select.appendChild(o);}
-      $('sellerInfo').textContent=sellers.length+' vendedor(es) encontrado(s). Se nenhum for marcado, serão incluídos todos. Use “Selecionar todos” para marcar a lista completa.'+(status.errors?.length?' Atenção: houve falhas parciais; atualize antes de extrair.':'');
+      if(!sellers.length){list.innerHTML='<p class="muted">Nenhum vendedor encontrado.</p>';$('sellerInfo').textContent=status.message||'A API não retornou vendedores para este sorteio.';return;}
+      for(const s of sellers){const label=document.createElement('label');label.className='seller-check';const input=document.createElement('input');input.type='checkbox';input.value=s.id;input.className='seller-option';const name=document.createElement('span');name.textContent=s.name;label.append(input,name);list.appendChild(label);}
+      $('sellerInfo').textContent=sellers.length+' vendedor(es) encontrado(s). Marque as caixas dos vendedores desejados. Se nenhuma caixa for marcada, serão incluídos todos.'+(status.errors?.length?' Atenção: houve falhas parciais; atualize antes de extrair.':'');
     }catch(e){$('sellerInfo').textContent='Não foi possível carregar a lista completa: '+e.message;}
-    finally{select.disabled=false;$('reloadSellers').disabled=false;$('selectAllSellers').disabled=false;$('clearSellers').disabled=false;}
+    finally{$('reloadSellers').disabled=false;$('selectAllSellers').disabled=false;$('clearSellers').disabled=false;}
   }
   async function login() {
     const email=$('email').value.trim(),password=$('password').value;
@@ -59,7 +59,7 @@
     catch(e){session='';sessionStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);}
     finally{$('loginBtn').disabled=false;}
   }
-  async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;sellers=[];$('seller').replaceChildren();$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
+  async function logout(){try{if(session)await api('/api/logout',{method:'POST',body:'{}'});}catch{}session='';sessionStorage.removeItem('rds_extrator_session');contacts=[];canExport=false;sellers=[];$('sellerCheckboxes').replaceChildren();$('draws').replaceChildren();$('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';$('vcfBtn').disabled=true;$('csvBtn').disabled=true;loggedIn(false);setStatus('Sessão encerrada. Entre novamente para extrair contatos.');setProgress('Aguardando autenticação.');}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   async function extract(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');
@@ -67,19 +67,19 @@
     $('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';
     setProgress('Iniciando extração segura em segundo plano…');
     try{
-      const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,sellerIds:[...$('seller').selectedOptions].map(o=>o.value)})});
+      const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,sellerIds:[...document.querySelectorAll('#sellerCheckboxes input.seller-option:checked')].map(o=>o.value)})});
       let result;
       do{
         await sleep(1800);
         result=await api('/api/extract/status?id='+encodeURIComponent(started.jobId));
         $('ticketsCount').textContent=Number(result.ticketsRead||0).toLocaleString('pt-BR');
         $('errorsCount').textContent=(result.errors||[]).length.toLocaleString('pt-BR');
-        setProgress((result.message||'Extração em andamento.')+'\n'+(result.current||'')+'\nPáginas processadas: '+Number(result.pagesDone||0).toLocaleString('pt-BR')+' · Bilhetes lidos: '+Number(result.ticketsRead||0).toLocaleString('pt-BR'));
+        setProgress((result.message||'Extração em andamento.')+'\n'+(result.current||'')+'\nPáginas processadas: '+Number(result.pagesDone||0).toLocaleString('pt-BR')+' · Bilhetes vendidos analisados: '+Number(result.ticketsRead||0).toLocaleString('pt-BR'));
       }while(result.status==='running');
       if(result.status!=='complete'||(result.errors||[]).length){setProgress((result.message||'A extração teve falhas.')+'\n'+(result.errors||[]).slice(0,8).join('\n'));return;}
       contacts=result.contacts||[];canExport=true;$('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
       $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;
-      setProgress('Concluído sem falhas: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes lidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido.');
+      setProgress('Concluído sem falhas: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos analisados e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido.');
     }catch(e){$('errorsCount').textContent='1';setProgress('Falha: '+e.message+'\nExportação bloqueada para evitar arquivo incompleto.');}
     finally{$('extractBtn').disabled=false;$('reloadBtn').disabled=false;}
   }
@@ -91,7 +91,7 @@
   $('reloadBtn').addEventListener('click',()=>loadDraws().catch(e=>setStatus(e.message,true)));$('extractBtn').addEventListener('click',extract);
   $('selectAllDraws').addEventListener('click',()=>{[...$('draws').options].forEach(o=>o.selected=true);loadSellers();});$('clearDraws').addEventListener('click',()=>{[...$('draws').options].forEach(o=>o.selected=false);loadSellers();});
   $('draws').addEventListener('change',()=>loadSellers());$('reloadSellers').addEventListener('click',()=>loadSellers());
-  $('selectAllSellers').addEventListener('click',()=>{[...$('seller').options].forEach(o=>o.selected=true);});$('clearSellers').addEventListener('click',()=>{[...$('seller').options].forEach(o=>o.selected=false);});
+  $('selectAllSellers').addEventListener('click',()=>{document.querySelectorAll('#sellerCheckboxes input.seller-option').forEach(o=>o.checked=true);});$('clearSellers').addEventListener('click',()=>{document.querySelectorAll('#sellerCheckboxes input.seller-option').forEach(o=>o.checked=false);});
   $('vcfBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const data=contacts.map(c=>'BEGIN:VCARD\r\nVERSION:3.0\r\nN:'+vcfEscape(c.name)+';;;;\r\nFN:'+vcfEscape(c.name)+'\r\nTEL;TYPE=CELL:'+c.phone+'\r\nEND:VCARD').join('\r\n')+'\r\n';download('contatos-reino-da-sorte.vcf','text/vcard;charset=utf-8',data);});
   $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
   if(localStorage.getItem('rds_extrator_email')){$('email').value=localStorage.getItem('rds_extrator_email');$('rememberPassword').checked=true;}
