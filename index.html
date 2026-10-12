@@ -54,7 +54,7 @@ window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();ins
 installBtn.addEventListener("click",async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installBtn.hidden=true;});
 if("serviceWorker" in navigator && location.protocol==="https:"){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}
 </script>
-<script src="/app.js?v=10"></script>
+<script src="/app.js?v=11"></script>
 <script>window.addEventListener("error",function(e){var s=document.getElementById("status");if(s&&e.message)s.textContent="Erro interno do aplicativo: "+e.message;});window.addEventListener("unhandledrejection",function(e){var s=document.getElementById("status");if(s)s.textContent="Falha de conexão: "+(e.reason&&e.reason.message?e.reason.message:String(e.reason));});</script>
 </body>
 </html>
