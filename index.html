@@ -2,23 +2,32 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Extrator de Contatos RDS</title>
+<meta name="theme-color" content="#071426">
+<title>Extrator de Contatos RDS | Reino da Sorte</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#071426;color:#f3f7fc;font:16px system-ui,Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:22px}
-main{width:min(700px,100%);border:1px solid #29415e;border-radius:20px;overflow:hidden;background:#10223a;box-shadow:0 18px 60px #0005}
-header{padding:30px;background:linear-gradient(135deg,#163c67,#071426);border-bottom:1px solid #29415e}.brand{color:#e7bd65;font-size:12px;font-weight:800;letter-spacing:2px}h1{font-size:clamp(25px,5vw,38px);margin:9px 0}header p{color:#bfd0e3;margin:0;line-height:1.5}
-section{padding:25px}.step{padding:14px;margin:10px 0;background:#0a192c;border:1px solid #29415e;border-radius:12px}.step b{display:block;margin-bottom:5px;color:#e7bd65}.step p{margin:0;color:#c7d5e5;line-height:1.5}
-a.btn{display:block;text-align:center;text-decoration:none;background:#2386f4;color:#fff;font-weight:800;padding:15px;border-radius:10px;margin-top:18px}
-.note{font-size:13px;color:#aabbd0;line-height:1.6;margin-top:18px}footer{padding:15px 25px;border-top:1px solid #29415e;color:#aabbd0;font-size:12px}
+:root{color-scheme:dark;--bg:#071426;--panel:#10223a;--line:#29415e;--blue:#2386f4;--gold:#e7bd65;--text:#f4f7fb;--muted:#aabbd0}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#15365b 0,transparent 48%),var(--bg);color:var(--text);font:16px system-ui,Arial,sans-serif;min-height:100vh;padding:24px}
+main{width:min(960px,100%);margin:0 auto;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:var(--panel);box-shadow:0 20px 70px #0005}
+header{padding:clamp(24px,5vw,42px);background:linear-gradient(120deg,#163c67,#0b1b30);border-bottom:1px solid var(--line)}
+.brand{color:var(--gold);font-size:12px;font-weight:900;letter-spacing:2px}h1{font-size:clamp(27px,5vw,42px);line-height:1.1;margin:12px 0}header p{max-width:650px;color:#c8d7e8;line-height:1.6;margin:0}
+.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid #5b4b2c;background:#332b1b;color:#f3d38b;border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;margin-top:20px}
+.content{padding:clamp(18px,4vw,34px)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.card{background:#0a192c;border:1px solid var(--line);border-radius:15px;padding:19px}.card h2{font-size:16px;margin:0 0 8px;color:var(--gold)}.card p{margin:0;color:#c8d7e8;line-height:1.55;font-size:14px}
+.num{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:8px;background:#1c3c60;color:#fff;margin-right:7px}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin:22px 0}.btn{display:inline-flex;justify-content:center;align-items:center;min-height:48px;padding:13px 18px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px}.primary{background:var(--blue);color:white}.secondary{background:#1b3049;border:1px solid var(--line);color:white}
+.note{padding:15px;border-radius:12px;background:#0b1b2d;border:1px solid var(--line);color:var(--muted);font-size:13px;line-height:1.6;margin-top:16px}
+footer{padding:17px 25px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+@media(max-width:650px){body{padding:12px}.grid{grid-template-columns:1fr}.actions .btn{width:100%}}
 </style>
 </head>
 <body><main>
-<header><div class="brand">REINO DA SORTE</div><h1>Extrator de Contatos RDS</h1><p>Acesso oficial do projeto para instalar a extensão no Chrome e testar a conexão com o painel autorizado.</p></header>
-<section>
-<div class="step"><b>1. Baixar a extensão</b><p>Use o botão abaixo para baixar a versão empacotada do repositório.</p></div>
-<a class="btn" href="https://github.com/bancareinodasorte-tech/extrator-contatos-rds/archive/refs/heads/main.zip">Baixar pacote do projeto (.ZIP)</a>
-<div class="step"><b>2. Instalar no Chrome</b><p>O Chrome exige que extensões locais sejam instaladas pelo menu de extensões e pelo modo do desenvolvedor. Um site não pode instalar uma extensão automaticamente sem a sua ação.</p></div>
-<div class="step"><b>3. Conectar e testar</b><p>Depois de instalar, entre no painel oficial da Reino da Sorte e abra a extensão. A primeira validação deve ser a listagem dos sorteios, antes de qualquer extração em massa.</p></div>
-<p class="note"><strong>Estado do projeto:</strong> pacote inicial disponível; a conexão com a sessão real e o formato atual da API ainda precisam ser validados. Não envie senha, cookies ou tokens. A extensão deve operar somente em leitura.</p>
-</section><footer>Projeto separado de qualquer outro sistema. Não modifica sorteios, bilhetes ou vendas.</footer>
+<header><div class="brand">REINO DA SORTE · FERRAMENTA DE LEITURA</div><h1>Extrator de Contatos RDS</h1><p>Selecione sorteios e vendedores, reúna contatos sem duplicidade e exporte para a agenda. A conexão utiliza sua sessão autenticada do painel oficial no navegador.</p><div class="pill">● Validação da API oficial confirmada · extração integral pendente</div></header>
+<div class="content">
+<div class="grid">
+<section class="card"><h2><span class="num">1</span>Entre no painel oficial</h2><p>Abra o painel e entre com seu login habitual. Mantenha essa aba aberta para que a extensão possa verificar a sessão local.</p><div class="actions"><a class="btn secondary" href="https://admin.reinodasorte.com.br/draws" target="_blank" rel="noopener">Abrir painel oficial ↗</a></div></section>
+<section class="card"><h2><span class="num">2</span>Instale a extensão</h2><p>Baixe os arquivos do projeto. No Chrome para computador, abra <b>chrome://extensions</b>, ative o Modo do desenvolvedor e selecione “Carregar sem compactação” na pasta extraída.</p><div class="actions"><a class="btn primary" href="https://github.com/bancareinodasorte-tech/extrator-contatos-rds/archive/refs/heads/main.zip">Baixar extensão (.ZIP) ↓</a></div></section>
+<section class="card"><h2><span class="num">3</span>Carregue os sorteios</h2><p>Com o painel aberto, clique no ícone da extensão, escolha “Verificar painel conectado” e “Carregar sorteios disponíveis”. Selecione os sorteios que deseja consultar.</p></section>
+<section class="card"><h2><span class="num">4</span>Extraia e exporte</h2><p>Filtre por vendedor se necessário e inicie a leitura. A exportação só deve ser liberada quando todos os lotes e páginas selecionados terminarem sem falhas.</p></section>
+</div>
+<div class="note"><b>Estado transparente do projeto:</b> a API oficial respondeu com sucesso e a amostra de 5 bilhetes foi lida. A extração integral, os resultados VCF/CSV e o APK ainda não foram validados/concluídos. Esta página não extrai contatos sozinha; a sessão do painel é acessada pela extensão local. Nunca compartilhe senha, token ou cookies.</div>
+</div><footer>Somente leitura. Não altera sorteios, bilhetes, clientes nem vendas. Projeto independente do Canal de Vendas.</footer>
 </main></body></html>
