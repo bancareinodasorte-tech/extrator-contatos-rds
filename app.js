@@ -172,8 +172,8 @@
       if(result.status!=='complete'||(result.errors||[]).length){setProgress((result.message||'A extração teve falhas.')+'\n'+(result.errors||[]).slice(0,8).join('\n'));return;}
       contacts=result.contacts||[];canExport=true;$('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
       $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;$('previewBtn').disabled=!contacts.length;$('previewBtn').hidden=!contacts.length;
-      await saveContactsLocally(contacts,{ticketsRead:result.ticketsRead||0});
-      setProgress('Concluído sem falhas: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos analisados e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido. Resultado guardado neste dispositivo para recuperação se o aplicativo for fechado.');
+      let savedLocally=false;try{await saveContactsLocally(contacts,{ticketsRead:result.ticketsRead||0});savedLocally=true;}catch(storageError){setStatus('Aviso: a extração terminou, mas não foi possível preservar os contatos localmente: '+storageError.message,true);}
+      setProgress('Concluído sem falhas: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos analisados e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos com telefone válido. '+(savedLocally?'Resultado guardado neste dispositivo para recuperação se o aplicativo for fechado.':'Não foi possível guardar uma cópia local; mantenha o aplicativo aberto até exportar os arquivos.'));
     }catch(e){$('errorsCount').textContent='1';setProgress('Falha: '+e.message+'\nExportação bloqueada para evitar arquivo incompleto.');}
     finally{if(workflowStage==='extracting')setWorkflow('extract');}
   }
@@ -234,8 +234,8 @@
         contacts=result.contacts||[];canExport=true;
         $('contactsCount').textContent=contacts.length.toLocaleString('pt-BR');
         $('vcfBtn').disabled=!contacts.length;$('csvBtn').disabled=!contacts.length;$('previewBtn').disabled=!contacts.length;$('previewBtn').hidden=!contacts.length;
-        await saveContactsLocally(contacts,{ticketsRead:result.ticketsRead||0});
-        setProgress('Concluído: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos. Resultado guardado neste dispositivo.');
+        let savedLocally=false;try{await saveContactsLocally(contacts,{ticketsRead:result.ticketsRead||0});savedLocally=true;}catch(storageError){setStatus('Aviso: a extração terminou, mas não foi possível preservar os contatos localmente: '+storageError.message,true);}
+        setProgress('Concluído: '+Number(result.ticketsRead||0).toLocaleString('pt-BR')+' bilhetes vendidos e '+contacts.length.toLocaleString('pt-BR')+' contatos únicos. '+(savedLocally?'Resultado guardado neste dispositivo.':'Não foi possível guardar uma cópia local; exporte os arquivos antes de fechar o aplicativo.'));
       }else setProgress(result.message||'A extração não pôde ser recuperada.');
     }catch(e){setProgress('Não foi possível recuperar automaticamente: '+e.message+' Se o servidor reiniciou, o trabalho pode ter sido perdido.');}
     finally{setWorkflow('extract');}
