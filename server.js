@@ -209,15 +209,18 @@ const app=http.createServer(async(req,res)=>{
       if(!ids.length)return json(res,400,{success:false,message:'Selecione ao menos um sorteio.'});
       if(ids.length>50)return json(res,400,{success:false,message:'Selecione no máximo 50 sorteios por extração.'});
       const jobId=crypto.randomBytes(18).toString('hex');
+      const resumeToken=crypto.randomBytes(32).toString('hex');
       const job={id:jobId,status:'running',message:'Extração iniciada.',ticketsRead:0,pagesDone:0,current:'Preparando leitura…',contacts:[],contactsCount:0,errors:[],createdAt:Date.now()};
-      extractionJobs.set(jobId,{job,sessionId:String(req.headers['x-extrator-session']||'')});
+      extractionJobs.set(jobId,{job,sessionId:String(req.headers['x-extrator-session']||''),resumeToken});
       runExtraction(s,b,job).catch(e=>{job.status='failed';job.message=e.message||'Falha inesperada';job.errors=[job.message];job.contacts=[];});
-      return json(res,202,{success:true,jobId,status:'running'});
+      return json(res,202,{success:true,jobId,resumeToken,status:'running'});
     }catch(e){return sendError(res,e);}
   }
   if(req.method==='GET'&&u.pathname==='/api/extract/status'){
     const jobId=u.searchParams.get('id')||'';const record=extractionJobs.get(jobId);
-    if(!record||record.sessionId!==String(req.headers['x-extrator-session']||''))return json(res,404,{success:false,message:'Extração não encontrada ou sessão diferente.'});
+    const sameSession=record&&record.sessionId===String(req.headers['x-extrator-session']||'');
+    const sameResumeToken=record&&record.resumeToken&&record.resumeToken===String(req.headers['x-extrator-resume']||'');
+    if(!record||(!sameSession&&!sameResumeToken))return json(res,404,{success:false,message:'Extração não encontrada ou autorização de retomada inválida.'});
     const j=record.job;
     return json(res,200,{success:true,status:j.status,message:j.message,current:j.current,ticketsRead:j.ticketsRead,pagesDone:j.pagesDone,contactsCount:j.contactsCount,contacts:j.status==='complete'?j.contacts:[],errors:j.errors||[]});
   }
