@@ -1,33 +1,60 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#071426">
-<title>Extrator de Contatos RDS | Reino da Sorte</title>
+<meta name="description" content="Extrator de Contatos RDS — sistema web para organizar e exportar contatos de sorteios autorizados.">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>Extrator de Contatos RDS</title>
 <style>
-:root{color-scheme:dark;--bg:#071426;--panel:#10223a;--line:#29415e;--blue:#2386f4;--gold:#e7bd65;--text:#f4f7fb;--muted:#aabbd0}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#15365b 0,transparent 48%),var(--bg);color:var(--text);font:16px system-ui,Arial,sans-serif;min-height:100vh;padding:24px}
-main{width:min(960px,100%);margin:0 auto;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:var(--panel);box-shadow:0 20px 70px #0005}
-header{padding:clamp(24px,5vw,42px);background:linear-gradient(120deg,#163c67,#0b1b30);border-bottom:1px solid var(--line)}
-.brand{color:var(--gold);font-size:12px;font-weight:900;letter-spacing:2px}h1{font-size:clamp(27px,5vw,42px);line-height:1.1;margin:12px 0}header p{max-width:650px;color:#c8d7e8;line-height:1.6;margin:0}
-.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid #5b4b2c;background:#332b1b;color:#f3d38b;border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;margin-top:20px}
-.content{padding:clamp(18px,4vw,34px)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.card{background:#0a192c;border:1px solid var(--line);border-radius:15px;padding:19px}.card h2{font-size:16px;margin:0 0 8px;color:var(--gold)}.card p{margin:0;color:#c8d7e8;line-height:1.55;font-size:14px}
-.num{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:8px;background:#1c3c60;color:#fff;margin-right:7px}
-.actions{display:flex;gap:12px;flex-wrap:wrap;margin:22px 0}.btn{display:inline-flex;justify-content:center;align-items:center;min-height:48px;padding:13px 18px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px}.primary{background:var(--blue);color:white}.secondary{background:#1b3049;border:1px solid var(--line);color:white}
-.note{padding:15px;border-radius:12px;background:#0b1b2d;border:1px solid var(--line);color:var(--muted);font-size:13px;line-height:1.6;margin-top:16px}
-footer{padding:17px 25px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
-@media(max-width:650px){body{padding:12px}.grid{grid-template-columns:1fr}.actions .btn{width:100%}}
+:root{color-scheme:dark;--bg:#071426;--panel:#10223a;--panel2:#0a192c;--line:#29415e;--blue:#2386f4;--gold:#e7bd65;--text:#f4f7fb;--muted:#aabbd0;--green:#4bc38a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,-apple-system,Segoe UI,Arial,sans-serif;min-height:100vh}
+header{padding:17px clamp(16px,4vw,32px);background:linear-gradient(120deg,#163c67,#0b1b30);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:12px}.logo{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#e7bd65;color:#071426;font-weight:1000;font-size:17px}.brand strong{display:block;font-size:15px;letter-spacing:.2px}.brand small{display:block;color:#b8cce1;margin-top:3px;font-size:11px}.state{border:1px solid #69572e;color:#f3d38b;background:#332b1b;border-radius:999px;padding:7px 10px;font-size:11px;font-weight:800;white-space:nowrap}
+main{width:min(1100px,100%);margin:auto;padding:clamp(15px,3vw,28px)}.intro{margin:4px 0 22px}.intro h1{font-size:clamp(25px,4vw,34px);margin:0 0 7px}.intro p{margin:0;color:var(--muted);line-height:1.55}
+.layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:16px}.card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:19px;min-width:0}.card h2{font-size:16px;margin:0 0 14px}.muted{color:var(--muted);font-size:13px;line-height:1.55}.step{display:flex;gap:11px;padding:12px 0;border-bottom:1px solid #213954}.step:last-child{border-bottom:0}.num{flex:0 0 28px;height:28px;border-radius:9px;background:#1c3c60;display:grid;place-items:center;font-weight:800}.step b{display:block;margin-bottom:4px;font-size:14px}.step p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:10px;min-height:44px;padding:11px 15px;background:var(--blue);color:white;text-decoration:none;font-weight:800;font-size:13px;cursor:pointer}.btn.alt{background:#1b3049;border:1px solid var(--line)}.btn:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:15px}
+.statusbox{margin-top:14px;background:var(--panel2);border:1px solid var(--line);padding:13px;border-radius:11px;font-size:12px;line-height:1.6;color:var(--muted)}.statusbox b{color:#f3d38b}
+label{display:block;font-size:12px;color:#d1deec;margin:12px 0 5px}input,select{width:100%;border:1px solid var(--line);background:#071426;color:white;padding:12px;border-radius:9px;font:inherit;min-height:43px}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:13px}.metric{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}.metric strong{display:block;font-size:19px}.metric span{font-size:11px;color:var(--muted)}
+.bottom{margin-top:16px}.hidden{display:none!important}
+footer{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;padding:22px 16px 30px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}.state{white-space:normal;text-align:center;max-width:130px}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.metric{padding:9px}.metric strong{font-size:17px}}
+@media(max-width:390px){header{align-items:flex-start}.brand small{max-width:180px}.state{font-size:10px}}
 </style>
 </head>
-<body><main>
-<header><div class="brand">REINO DA SORTE · FERRAMENTA DE LEITURA</div><h1>Extrator de Contatos RDS</h1><p>Selecione sorteios e vendedores, reúna contatos sem duplicidade e exporte para a agenda. A conexão utiliza sua sessão autenticada do painel oficial no navegador.</p><div class="pill">● Validação da API oficial confirmada · extração integral pendente</div></header>
-<div class="content">
-<div class="grid">
-<section class="card"><h2><span class="num">1</span>Entre no painel oficial</h2><p>Abra o painel e entre com seu login habitual. Mantenha essa aba aberta para que a extensão possa verificar a sessão local.</p><div class="actions"><a class="btn secondary" href="https://admin.reinodasorte.com.br/draws" target="_blank" rel="noopener">Abrir painel oficial ↗</a></div></section>
-<section class="card"><h2><span class="num">2</span>Instale a extensão</h2><p>Baixe os arquivos do projeto. No Chrome para computador, abra <b>chrome://extensions</b>, ative o Modo do desenvolvedor e selecione “Carregar sem compactação” na pasta extraída.</p><div class="actions"><a class="btn primary" href="https://github.com/bancareinodasorte-tech/extrator-contatos-rds/archive/refs/heads/main.zip">Baixar extensão (.ZIP) ↓</a></div></section>
-<section class="card"><h2><span class="num">3</span>Carregue os sorteios</h2><p>Com o painel aberto, clique no ícone da extensão, escolha “Verificar painel conectado” e “Carregar sorteios disponíveis”. Selecione os sorteios que deseja consultar.</p></section>
-<section class="card"><h2><span class="num">4</span>Extraia e exporte</h2><p>Filtre por vendedor se necessário e inicie a leitura. A exportação só deve ser liberada quando todos os lotes e páginas selecionados terminarem sem falhas.</p></section>
+<body>
+<header><div class="brand"><div class="logo">RDS</div><div><strong>Extrator de Contatos</strong><small>REINO DA SORTE · ÁREA DE EXTRAÇÃO</small></div></div><div class="state" id="appState">Integração em configuração</div></header>
+<main>
+<div class="intro"><h1>Seus contatos, organizados.</h1><p>Selecione sorteios e vendedores, elimine números duplicados e prepare contatos para a agenda. A interface funciona no computador e em telas de celular.</p></div>
+<div class="layout">
+<section class="card">
+<h2>Conexão com a Reino da Sorte</h2>
+<div class="step"><div class="num">1</div><div><b>Autorização segura</b><p>O sistema precisa autenticar nesta aplicação sem depender de uma extensão do navegador. A sessão da página oficial não é compartilhada automaticamente com este endereço.</p></div></div>
+<div class="step"><div class="num">2</div><div><b>Carregar sorteios</b><p>Após concluir a integração de autenticação, os sorteios e seus vendedores serão exibidos aqui para seleção.</p></div></div>
+<div class="step"><div class="num">3</div><div><b>Extrair e exportar</b><p>A extração percorrerá todos os lotes e páginas, deduplicará por telefone e liberará os arquivos apenas quando a leitura estiver completa.</p></div></div>
+<div class="statusbox" role="status"><b>Estado atual:</b> já confirmamos que a API oficial aceita a sessão do painel e retorna sorteios e bilhetes. A autenticação própria desta aplicação e a extração integral ainda não foram concluídas. Não informe sua senha nesta página.</div>
+<div class="actions"><a class="btn alt" href="https://admin.reinodasorte.com.br/draws" target="_blank" rel="noopener">Painel oficial ↗</a><button class="btn" id="installBtn" hidden>Instalar aplicativo</button></div>
+</section>
+<section class="card">
+<h2>Área de extração</h2>
+<p class="muted">Esta área será habilitada quando a autenticação independente estiver pronta. Ela não simula conexão nem apresenta resultados inventados.</p>
+<label for="draws">Sorteios disponíveis</label><select id="draws" disabled><option>Integração pendente</option></select>
+<label for="seller">Vendedor (opcional)</label><input id="seller" placeholder="Todos os vendedores" disabled>
+<div class="actions"><button class="btn" disabled>Carregar sorteios</button><button class="btn alt" disabled>Extrair contatos</button></div>
+<div class="metrics"><div class="metric"><strong>—</strong><span>Bilhetes lidos</span></div><div class="metric"><strong>—</strong><span>Contatos únicos</span></div><div class="metric"><strong>—</strong><span>Falhas</span></div></div>
+<div class="actions"><button class="btn" disabled>Exportar VCF</button><button class="btn alt" disabled>Exportar CSV</button></div>
+</section>
 </div>
-<div class="note"><b>Estado transparente do projeto:</b> a API oficial respondeu com sucesso e a amostra de 5 bilhetes foi lida. A extração integral, os resultados VCF/CSV e o APK ainda não foram validados/concluídos. Esta página não extrai contatos sozinha; a sessão do painel é acessada pela extensão local. Nunca compartilhe senha, token ou cookies.</div>
-</div><footer>Somente leitura. Não altera sorteios, bilhetes, clientes nem vendas. Projeto independente do Canal de Vendas.</footer>
-</main></body></html>
+<section class="card bottom"><h2>O mesmo sistema em cada dispositivo</h2><p class="muted">A versão web será acessada por este link no computador, iPhone e Android. O APK Android será preparado a partir da mesma aplicação depois que a conexão e a extração estiverem funcionais. Não é necessário usar uma extensão do Chrome no uso final.</p></section>
+</main>
+<footer>Somente leitura. Não modifica sorteios, bilhetes ou vendas. Projeto Extrator Contatos RDS, independente do Projeto Zap.</footer>
+<script>
+let installPrompt=null;
+const installBtn=document.getElementById("installBtn");
+window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();installPrompt=event;installBtn.hidden=false;});
+installBtn.addEventListener("click",async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installBtn.hidden=true;});
+if("serviceWorker" in navigator && location.protocol==="https:"){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}
+</script>
+</body>
+</html>
