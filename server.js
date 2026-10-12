@@ -91,7 +91,7 @@ const app=http.createServer(async(req,res)=>{
     try{
       const params=u.searchParams;
       const query=params.toString();
-      const result=await official(s,'/admin/draws'+(query?'?'+query:''));
+      const result=await official(s,'/admin/draws'+(query?'?'+query:'?startDate=2000-01-01&endDate=2099-12-31'));
       const d=extractData(result);
       const draws=Array.isArray(d)?d:(Array.isArray(d?.draws)?d.draws:[]);
       return json(res,200,{success:true,draws});
