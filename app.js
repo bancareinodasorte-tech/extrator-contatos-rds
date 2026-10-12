@@ -35,6 +35,7 @@
     else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
     $('seller').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
     setProgress('Selecione um ou mais sorteios. Os vendedores participantes serão carregados automaticamente.');
+    if(select.options.length){select.options[0].selected=true;await loadSellers();}
   }
   async function loadSellers(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');
