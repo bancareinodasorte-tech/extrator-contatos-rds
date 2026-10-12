@@ -66,7 +66,7 @@ async function runExtraction(s, b, job) {
   const ids=Array.isArray(b.drawIds)?b.drawIds.map(Number).filter(n=>Number.isFinite(n)&&n>0):[];
   const sellerFilter=String(b.seller||'').trim().toLocaleLowerCase('pt-BR');
   const byPhone=new Map(); let ticketsRead=0; const errors=[];
-  const normalizePhone=v=>{let n=String(v||'').replace(/\\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.length===10||n.length===11){if(!n.startsWith('55'))n='55'+n;}if(n.length<12||n.length>13)return '';return '+'+n;};
+  const normalizePhone=v=>{let n=String(v||'').replace(/\\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.length===10||n.length===11){if(!n.startsWith('55'))n='55'+n;}if(n.length<12||n.length>13||!n.startsWith('55'))return '';return '+'+n;};
   for(const drawId of ids){
     let drawInfo=null;
     try { const dr=extractData(await official(s,'/admin/draws/'+drawId)); drawInfo=dr?.draw||dr; } catch {}
@@ -83,8 +83,8 @@ async function runExtraction(s, b, job) {
           totalPages=Math.max(1,Number(pagination.totalPages)||page);
           for(const t of tickets){
             ticketsRead++;
-            const buyer=t.buyer||{};const seller=t.seller||{};
-            const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||'');
+            const buyer=t.buyer||t.customer||{};const seller=t.seller||t.vendor||{};
+            const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||t.sellerName||t.seller_name||'');
             if(sellerFilter&&!String(sellerName).toLocaleLowerCase('pt-BR').includes(sellerFilter))continue;
             const buyerName=typeof buyer==='string'?buyer:(buyer.name||buyer.fullName||buyer.full_name||buyer.nome||'');
             const phone=typeof buyer==='object'?(buyer.phone||buyer.phoneNumber||buyer.phone_number||buyer.whatsapp||buyer.mobile||t.buyer_phone||t.phone||''):(t.buyer_phone||t.phone||'');
