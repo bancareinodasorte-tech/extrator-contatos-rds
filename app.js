@@ -22,7 +22,7 @@
   function loggedIn(on) {
     $('draws').disabled=!on;$('reloadBtn').disabled=!on;$('extractBtn').disabled=!on;$('selectAllDraws').disabled=!on;$('clearDraws').disabled=!on;
     $('logoutBtn').hidden=!on;$('loginBtn').disabled=on;$('email').disabled=on;$('password').disabled=on;
-    appState(on?'Conectado':'Aguardando login');
+    appState(on?'Conectado':'Aguardando login');$('extractBtn').textContent='Iniciar extração';
   }
   async function loadDraws() {
     setStatus('Buscando os sorteios disponíveis na conta oficial…');
@@ -36,13 +36,13 @@
     if(!select.options.length){const o=document.createElement('option');o.textContent='Nenhum sorteio finalizado disponível';select.appendChild(o);setStatus('A API não retornou sorteios finalizados para esta conta.',true);}
     else setStatus('Conectado. '+select.options.length+' sorteio(s) carregado(s).');
     $('sellerCheckboxes').replaceChildren();sellers=[];sellerDrawSignature='';$('sellerInfo').textContent='Escolha um ou mais sorteios acima para listar os vendedores participantes.';
-    setProgress('Selecione um ou mais sorteios. Os vendedores participantes serão carregados automaticamente.');
+    setProgress('Selecione os sorteios desejados e, depois, toque em “Iniciar extração”. Nenhuma leitura será iniciada automaticamente.');
     if(select.options.length){for(const option of select.options)option.selected=false;select.selectedIndex=-1;updateSelectionSummary();}
   }
   async function loadSellers(){
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);const signature=[...drawIds].sort().join(',');const list=$('sellerCheckboxes');list.replaceChildren();sellers=[];sellerDrawSignature=signature;updateSelectionSummary();
     if(!drawIds.length){list.innerHTML='<p class="muted">Selecione ao menos um sorteio finalizado.</p>';$('sellerInfo').textContent='Selecione ao menos um sorteio finalizado.';return;}
-    $('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Consultando todos os lotes e páginas para encontrar os vendedores…';
+    $('reloadSellers').disabled=true;$('selectAllSellers').disabled=true;$('clearSellers').disabled=true;$('sellerInfo').textContent='Carregando a lista de vendedores participantes. Isso não inicia a extração dos contatos…';
     try{const started=await api('/api/sellers?drawIds='+encodeURIComponent(signature));let status=started;const startedAt=Date.now();
       while(status.status==='running'){$('sellerInfo').textContent=(status.current||status.message||'Buscando vendedores…')+' · '+(status.pagesDone||0)+' páginas consultadas';if(Date.now()-startedAt>12*60*1000)throw new Error('A consulta demorou mais que o esperado. Use “Atualizar vendedores” para tentar novamente.');await new Promise(resolve=>setTimeout(resolve,1500));status=await api('/api/sellers/status?id='+encodeURIComponent(started.jobId));}
       if(status.status!=='complete')throw new Error(status.message||'Não foi possível concluir a consulta.');const unique=new Map();for(const item of (status.sellers||[])){const key=normalizeSellerName(item.name);if(!key)continue;const previous=unique.get(key);if(!previous||String(item.name).length>String(previous.name).length)unique.set(key,item);}sellers=[...unique.values()].sort((x,y)=>x.name.localeCompare(y.name,'pt-BR'));
@@ -67,7 +67,7 @@
     const drawIds=[...$('draws').selectedOptions].map(o=>o.value);if(!drawIds.length)return setProgress('Selecione ao menos um sorteio.');
     contacts=[];canExport=false;$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('previewBtn').disabled=true;$('previewBtn').hidden=true;$('previewPanel').classList.add('hidden');$('extractBtn').disabled=true;$('reloadBtn').disabled=true;
     $('ticketsCount').textContent='0';$('contactsCount').textContent='0';$('errorsCount').textContent='0';
-    setProgress('Iniciando extração segura em segundo plano…');
+    setProgress('Extração solicitada manualmente. Iniciando leitura dos sorteios e vendedores selecionados…');
     try{
       const started=await api('/api/extract',{method:'POST',body:JSON.stringify({drawIds,sellerNames:[...document.querySelectorAll('#sellerCheckboxes input.seller-option:checked')].map(o=>o.dataset.sellerName)})});
       let result;
@@ -101,5 +101,5 @@
   $('csvBtn').addEventListener('click',()=>{if(!canExport||!contacts.length)return;const esc=s=>'"'+String(s||'').replace(/"/g,'""')+'"';download('contatos-reino-da-sorte.csv','text/csv;charset=utf-8','\uFEFFNome,Telefone\r\n'+contacts.map(c=>esc(c.name)+','+esc(c.phone)).join('\r\n'));});
   if(localStorage.getItem('rds_extrator_email')){$('email').value=localStorage.getItem('rds_extrator_email');$('rememberPassword').checked=true;}
   if(localStorage.getItem('rds_extrator_password'))$('password').value=localStorage.getItem('rds_extrator_password');
-  if(session){loggedIn(true);loadDraws().catch(e=>{session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');loggedIn(false);setStatus(e.message,true);});}else loggedIn(false);
+  if(session){loggedIn(true);loadDraws().catch(async e=>{if(e.message.includes('Sessão expirada')&&localStorage.getItem('rds_extrator_email')&&localStorage.getItem('rds_extrator_password')){try{const result=await fetch(API_BASE+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:localStorage.getItem('rds_extrator_email'),password:localStorage.getItem('rds_extrator_password')})});const data=await result.json();if(!result.ok||!data.session)throw new Error(data.message||'Não foi possível renovar a sessão.');session=data.session;localStorage.setItem('rds_extrator_session',session);loggedIn(true);await loadDraws();setStatus('Conexão restabelecida. Confira os sorteios antes de iniciar uma nova extração.');return;}catch(recoveryError){setStatus('A sessão foi perdida. Entre novamente para continuar: '+recoveryError.message,true);}}else setStatus(e.message,true);session='';sessionStorage.removeItem('rds_extrator_session');localStorage.removeItem('rds_extrator_session');loggedIn(false);});}else loggedIn(false);
 })();
