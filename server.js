@@ -66,44 +66,61 @@ function sendError(res,e){json(res,e.status||500,{success:false,message:e.messag
 async function runExtraction(s, b, job) {
   const ids=Array.isArray(b.drawIds)?b.drawIds.map(Number).filter(n=>Number.isFinite(n)&&n>0):[];
   const sellerIds=new Set(Array.isArray(b.sellerIds)?b.sellerIds.map(String):[]);
-  const byPhone=new Map(); let ticketsRead=0; const errors=[];
-  const normalizePhone=v=>{let n=String(v||'').replace(/\\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.length===10||n.length===11){if(!n.startsWith('55'))n='55'+n;}if(n.length<12||n.length>13||!n.startsWith('55'))return '';return '+'+n;};
+  const byPhone=new Map();let ticketsRead=0,pagesDone=0;const errors=[];
+  const normalizePhone=v=>{let n=String(v||'').replace(/\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.length===10||n.length===11){if(!n.startsWith('55'))n='55'+n;}if(n.length<12||n.length>13||!n.startsWith('55'))return '';return '+'+n;};
+  const consume=t=>{
+    const buyer=t.buyer??t.customer??null;
+    const status=String(t.status??t.ticket_status??t.sale_status??'').toLowerCase();
+    const hasBuyer=buyer!==null&&buyer!==undefined&&buyer!==''&&(typeof buyer!=='object'||Object.keys(buyer).length>0);
+    const soldStatuses=['sold','paid','approved','completed','finalized','finalised','vendido','pago','aprovado','concluido','concluído'];
+    if(!hasBuyer&&!soldStatuses.includes(status))return;
+    const seller=t.seller??t.vendor??{};
+    const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||seller.nome||t.sellerName||t.seller_name||'');
+    const sellerId=String(typeof seller==='object'?(seller.id??seller.seller_id??seller.user_id??seller.uuid??sellerName):sellerName);
+    if(sellerIds.size&&!sellerIds.has(sellerId)&&!sellerIds.has(String(sellerName)))return;
+    ticketsRead++;
+    const buyerName=typeof buyer==='string'?buyer:(buyer?.name||buyer?.fullName||buyer?.full_name||buyer?.nome||t.buyerName||t.buyer_name||'');
+    const phone=typeof buyer==='object'?(buyer?.phone||buyer?.cellphone||buyer?.mobile||buyer?.telephone||buyer?.phoneNumber||buyer?.phone_number||buyer?.whatsapp||t.buyerPhone||t.buyer_phone||t.telephone||t.phone||''):(t.buyerPhone||t.buyer_phone||t.telephone||t.phone||'');
+    const normalized=normalizePhone(phone);if(!normalized)return;
+    if(!byPhone.has(normalized)){const name=String(buyerName||'').normalize('NFC').trim().replace(/^(?:CLIENTE\s*)+/iu,'').replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');byPhone.set(normalized,{name:name||'SEM NOME',phone:normalized});}
+  };
+  const fetchPage=async(drawId,lot,page,limit=500)=>{
+    try{return await official(s,'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit='+limit);}
+    catch(e){if(page===1&&(e.status===400||e.status===422))return await official(s,'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page=1&limit=100');throw e;}
+  };
   for(const drawId of ids){
     let drawInfo=null;
-    try { const dr=extractData(await official(s,'/admin/draws/'+drawId)); drawInfo=dr?.draw||dr; } catch {}
+    try{const dr=extractData(await official(s,'/admin/draws/'+drawId));drawInfo=dr?.draw||dr;}
+    catch(e){errors.push('Sorteio '+drawId+': não foi possível consultar os lotes — '+e.message);continue;}
     let lots=[];
-    if(drawInfo&&Array.isArray(drawInfo.lots)&&drawInfo.lots.length) lots=drawInfo.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0);
-    else { const count=Number(drawInfo?.lotsCount??drawInfo?.totalLots??drawInfo?.lot_count??drawInfo?.lots); lots=Array.from({length:Math.max(1,Math.min(100,count||5))},(_,i)=>i+1); }
+    if(drawInfo&&Array.isArray(drawInfo.lots)&&drawInfo.lots.length)lots=drawInfo.lots.map(x=>Number(typeof x==='object'?(x.lot_number??x.lotNumber??x.number??x.id):x)).filter(n=>Number.isFinite(n)&&n>0);
+    else{const count=Number(drawInfo?.lotsCount??drawInfo?.totalLots??drawInfo?.lot_count??drawInfo?.lots);lots=Array.from({length:Math.max(1,Math.min(100,count||5))},(_,i)=>i+1);}
+    const tasks=[];
     for(const lot of lots){
-      let page=1,totalPages=1;
-      do {
-        try {
-          const result=await official(s,'/admin/draws/'+drawId+'/lots/'+lot+'/tickets?page='+page+'&limit=100');
-          const d=extractData(result); const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);
-          const pagination=d?.pagination||result?.pagination||{};
-          totalPages=Math.max(1,Number(pagination.totalPages)||page);
-          for(const t of tickets){
-            ticketsRead++;
-            const buyer=t.buyer||t.customer||{};const seller=t.seller||t.vendor||{};
-            const sellerName=typeof seller==='string'?seller:(seller.name||seller.fullName||seller.full_name||seller.nome||t.sellerName||t.seller_name||'');
-            const sellerId=String(typeof seller==='object'?(seller.id??seller.seller_id??seller.user_id??seller.uuid??sellerName):sellerName);
-            if(sellerIds.size&&!sellerIds.has(sellerId)&&!sellerIds.has(String(sellerName)))continue;
-            const buyerName=typeof buyer==='string'?buyer:(buyer.name||buyer.fullName||buyer.full_name||buyer.nome||t.buyerName||t.buyer_name||t.name||'');
-            const phone=typeof buyer==='object'?(buyer.phone||buyer.cellphone||buyer.mobile||buyer.telephone||buyer.phoneNumber||buyer.phone_number||buyer.whatsapp||t.buyerPhone||t.buyer_phone||t.telephone||t.phone||''):(t.buyerPhone||t.buyer_phone||t.telephone||t.phone||'');
-            const normalized=normalizePhone(phone); if(!normalized)continue;
-            if(!byPhone.has(normalized)){const name=String(buyerName||'').trim().toLocaleUpperCase('pt-BR').replace(/^CLIENTE\\s*/,'').trim();byPhone.set(normalized,{name:name||'SEM NOME',phone:normalized});}
-          }
-          job.ticketsRead=ticketsRead;job.pagesDone=(job.pagesDone||0)+1;job.current='Sorteio '+drawId+' · lote '+lot+' · página '+page+'/'+totalPages;
-        } catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página '+page+': '+e.message);break;}
-        page++;
-      } while(page<=totalPages);
+      job.current='Sorteio '+drawId+' · lote '+lot+' · preparando leitura…';
+      try{
+        const first=await fetchPage(drawId,lot,1,500);const d=extractData(first);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);const p=d?.pagination||first?.pagination||{};
+        const totalPages=Math.max(1,Number(p.totalPages||p.total_pages||p.pages)||1);
+        for(const t of tickets)consume(t);
+        pagesDone++;job.ticketsRead=ticketsRead;job.pagesDone=pagesDone;
+        for(let page=2;page<=totalPages;page++)tasks.push({drawId,lot,page,totalPages});
+      }catch(e){errors.push('Sorteio '+drawId+', lote '+lot+', página 1: '+e.message);}
     }
+    let cursor=0;const workers=Array.from({length:Math.min(10,tasks.length)},async()=>{
+      while(cursor<tasks.length){
+        const task=tasks[cursor++];job.current='Sorteio '+task.drawId+' · lote '+task.lot+' · página '+task.page+'/'+task.totalPages+' (leitura paralela)';
+        try{const result=await fetchPage(task.drawId,task.lot,task.page,500);const d=extractData(result);const tickets=Array.isArray(d?.tickets)?d.tickets:(Array.isArray(d)?d:[]);for(const t of tickets)consume(t);pagesDone++;job.pagesDone=pagesDone;job.ticketsRead=ticketsRead;}
+        catch(e){errors.push('Sorteio '+task.drawId+', lote '+task.lot+', página '+task.page+': '+e.message);}
+      }
+    });
+    await Promise.all(workers);
   }
-  if(errors.length){job.status='failed';job.message='A extração teve falhas; nenhum arquivo foi liberado.';job.errors=errors.slice(0,100);job.contacts=[];return;}
+  job.ticketsRead=ticketsRead;job.pagesDone=pagesDone;
+  if(errors.length){job.status='failed';job.message='A leitura teve '+errors.length+' falha(s); nenhum arquivo foi liberado.';job.errors=errors.slice(0,100);job.contacts=[];return;}
   const grouped=new Map();for(const c of byPhone.values())grouped.set(c.name,(grouped.get(c.name)||0)+1);
   const counts=new Map();const contacts=[];
   for(const c of byPhone.values()){const n=(counts.get(c.name)||0)+1;counts.set(c.name,n);contacts.push({name:'CLIENTE '+c.name+(grouped.get(c.name)>1?' '+n:''),phone:c.phone});}
-  job.status='complete';job.message='Extração concluída sem falhas.';job.contacts=contacts;job.contactsCount=contacts.length;job.errors=[];job.ticketsRead=ticketsRead;
+  job.status='complete';job.message='Leitura concluída sem falhas.';job.contacts=contacts;job.contactsCount=contacts.length;job.errors=[];job.ticketsRead=ticketsRead;
 }
 const app=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'https://extrator-contatos-rds.onrender.com','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,X-Extrator-Session','Access-Control-Max-Age':'86400','Vary':'Origin'});return res.end();}
