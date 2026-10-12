@@ -10,6 +10,23 @@
   let activeExtractionJob=localStorage.getItem('rds_extrator_active_job')||'';
   const normalizeSellerName = name => String(name||'').replace(/\uFFFD/g,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
   function updateSelectionSummary(){const draws=[...$('draws').selectedOptions].length;const options=[...document.querySelectorAll('#sellerCheckboxes input.seller-option')];const selected=options.filter(o=>o.checked).length;const total=sellers.length||options.length;$('selectionSummary').textContent=draws+' sorteio(s) selecionado(s) · '+total+' vendedores ativos · '+selected+' selecionado(s) · Total '+selected+'/'+total;}
+  const refreshApp = async () => {
+    const button=$('refreshAppBtn');
+    if(button){button.disabled=true;button.textContent='Atualizando…';}
+    try {
+      if('serviceWorker' in navigator){
+        const registration=await navigator.serviceWorker.getRegistration();
+        if(registration){
+          await registration.update().catch(()=>{});
+          if(registration.waiting){registration.waiting.postMessage({type:'SKIP_WAITING'});}
+        }
+      }
+      window.location.reload();
+    } catch {
+      window.location.reload();
+    }
+  };
+  $('refreshAppBtn')?.addEventListener('click',refreshApp);
   const setStatus = (message, bad=false) => { $('status').textContent=message; $('status').style.color=bad?'#ff9b9b':''; };
   const setProgress = message => $('progress').textContent=message;
   function setWorkflow(stage){workflowStage=stage;$('extractBtn').textContent=stage==='sellers'?'Carregar vendedores':stage==='extract'?'Iniciar extração':'Carregar vendedores';$('extractBtn').disabled=['draws','loading-sellers','extracting'].includes(stage);$('draws').disabled=['loading-sellers','extracting'].includes(stage);$('reloadBtn').disabled=['loading-sellers','extracting'].includes(stage);$('reloadSellers').disabled=stage!=='extract';$('selectAllSellers').disabled=stage!=='extract';$('clearSellers').disabled=stage!=='extract';}
