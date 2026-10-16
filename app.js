@@ -134,7 +134,7 @@
   }
   async function login() {
     const email=$('email').value.trim(),password=$('password').value;
-    if($('rememberPassword').checked){localStorage.setItem('rds_extrator_email',email);localStorage.setItem('rds_extrator_password',password);}else{localStorage.removeItem('rds_extrator_email');localStorage.removeItem('rds_extrator_password');}
+    if($('rememberPassword').checked){localStorage.setItem('rds_extrator_email',email);}else{localStorage.removeItem('rds_extrator_email');}localStorage.removeItem('rds_extrator_password');
     if(!email||!password)return setStatus('Informe o e-mail e a senha da conta oficial.',true);
     $('loginBtn').disabled=true;setStatus('Autenticando na API oficial da Reino da Sorte…');
     try{const result=await api('/api/login',{method:'POST',body:JSON.stringify({email,password})});session=result.session;localStorage.setItem('rds_extrator_session',session);$('password').value='';loggedIn(true);await loadDraws();}
@@ -202,7 +202,7 @@
     await download(filename,'text/vcard;charset=utf-8',data);if(!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()))setProgress('Download VCF solicitado. Se o navegador abrir o cartão, use Compartilhar para salvar ou importar os contatos.');}
   function vcfEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');}
   $('togglePassword').addEventListener('click',()=>{const p=$('password');const show=p.type==='password';p.type=show?'text':'password';$('togglePassword').textContent=show?'Ocultar':'Mostrar';$('togglePassword').setAttribute('aria-pressed',String(show));});
-  $('rememberPassword').addEventListener('change',()=>{if(!$('rememberPassword').checked){localStorage.removeItem('rds_extrator_email');localStorage.removeItem('rds_extrator_password');}});
+  $('rememberPassword').addEventListener('change',()=>{if(!$('rememberPassword').checked){localStorage.removeItem('rds_extrator_email');}localStorage.removeItem('rds_extrator_password');});
   $('loginBtn').addEventListener('click',login);$('password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('email').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('logoutBtn').addEventListener('click',logout);
   $('reloadBtn').addEventListener('click',()=>loadDraws().catch(e=>setStatus(e.message,true)));$('extractBtn').addEventListener('click',extract);
   function drawsChanged(){sellers=[];sellerDrawSignature='';$('sellerCheckboxes').innerHTML='<p class="muted">Toque em “Carregar vendedores” para identificar os participantes destes sorteios.</p>';const selected=[...$('draws').selectedOptions].length;setWorkflow(selected?'sellers':'draws');updateSelectionSummary();$('sellerInfo').textContent=selected?'Etapa 1 de 3 · '+selected+' sorteio(s) selecionado(s). Agora toque em “Carregar vendedores”.':'Selecione sorteios para começar.';canExport=false;contacts=[];$('vcfBtn').disabled=true;$('csvBtn').disabled=true;$('previewBtn').hidden=true;$('previewPanel').classList.add('hidden');}
